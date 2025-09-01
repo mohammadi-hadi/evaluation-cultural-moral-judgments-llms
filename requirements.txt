@@ -1,0 +1,99 @@
+# Core Dependencies for Moral Alignment Pipeline with Enhanced Features
+# Python 3.8+ required
+# Updated December 2024
+
+# ==============================================================================
+# Deep Learning and NLP
+# ==============================================================================
+torch>=2.0.0
+transformers>=4.35.0
+accelerate>=0.24.0
+bitsandbytes>=0.41.0  # For 8-bit quantization
+sentence-transformers>=2.5.0
+tokenizers>=0.14.0
+
+# ==============================================================================
+# Data Processing and Analysis
+# ==============================================================================
+pandas>=2.1.0
+numpy>=1.24.0
+scipy>=1.11.0
+scikit-learn>=1.4.0
+pyreadstat>=1.2.0  # For reading SPSS files (.sav)
+sqlalchemy>=2.0.0  # For database operations
+
+# ==============================================================================
+# Visualization
+# ==============================================================================
+matplotlib>=3.8.0
+seaborn>=0.13.0
+plotly>=5.18.0
+kaleido>=0.2.1  # For plotly image export
+
+# ==============================================================================
+# API Models (Latest 2024 versions)
+# ==============================================================================
+openai>=1.40.0  # Support for o1 models
+google-generativeai>=0.7.0  # Support for Gemini 2.0
+anthropic>=0.30.0  # Support for Claude 3.5
+cohere>=5.0.0  # Support for Command R+
+mistralai>=0.5.0  # Support for Mistral models
+
+# ==============================================================================
+# Web Interface (Human Dashboard)
+# ==============================================================================
+streamlit>=1.30.0
+streamlit-aggrid>=0.3.4  # For advanced tables
+streamlit-plotly-events>=0.0.6
+
+# ==============================================================================
+# Async and Parallel Processing
+# ==============================================================================
+aiohttp>=3.9.0
+joblib>=1.3.0
+
+# ==============================================================================
+# Storage and Compression
+# ==============================================================================
+h5py>=3.10.0  # For HDF5 storage
+pyarrow>=14.0.0  # For Parquet files
+
+# ==============================================================================
+# Utilities
+# ==============================================================================
+tqdm>=4.66.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+jupyter>=1.0.0
+ipykernel>=6.25.0
+notebook>=7.0.0
+nbformat>=5.9.0
+nbconvert>=7.11.0
+click>=8.1.0  # For CLI interfaces
+rich>=13.7.0  # For rich terminal output
+loguru>=0.7.0  # Advanced logging
+
+# ==============================================================================
+# Development and Testing
+# ==============================================================================
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+black>=23.11.0
+isort>=5.12.0
+flake8>=6.1.0
+mypy>=1.7.0
+
+# ==============================================================================
+# Optional: For vLLM deployment (requires specific CUDA versions)
+# ==============================================================================
+# vllm>=0.4.0  # Uncomment if using vLLM for inference optimization
+
+# ==============================================================================
+# Notes:
+# ==============================================================================
+# 1. For GPU support, ensure CUDA 11.8+ is installed
+# 2. Some large models require significant GPU memory (24GB+ recommended)
+# 3. Use pip install -r requirements.txt to install all dependencies
+# 4. For Google Colab, most dependencies are pre-installed
+# ==============================================================================
