@@ -1,0 +1,214 @@
+# Main Configuration File for Moral Alignment Pipeline
+# Flexible setup for local (M4 Max) and server (SURF 4xA100) execution
+
+# ==============================================================================
+# Execution Environment Settings
+# ==============================================================================
+execution:
+  # Options: 'local' (M4 Max), 'server' (SURF), 'hybrid' (API local, large models server)
+  mode: hybrid
+  
+  # Automatically detect environment
+  auto_detect: true
+  
+  # Force specific device
+  device_override: null  # Options: 'cuda', 'mps', 'cpu', null (auto-detect)
+
+# ==============================================================================
+# Storage Configuration
+# ==============================================================================
+storage:
+  # Server paths (SURF)
+  server:
+    base_path: /data/storage_4_tb/moral-alignment-pipeline
+    model_cache: /data/storage_4_tb/moral-alignment-pipeline/models
+    outputs: /data/storage_4_tb/moral-alignment-pipeline/outputs
+    data: /data/storage_4_tb/moral-alignment-pipeline/data
+    temp: /data/storage_4_tb/moral-alignment-pipeline/temp
+    
+  # Local paths (M4 Max)
+  local:
+    base_path: ~/Documents/Project06
+    model_cache: ~/.cache/huggingface
+    outputs: ~/Documents/Project06/outputs
+    data: ~/Documents/Project06/sample_data
+    temp: ~/Documents/Project06/temp
+    
+  # Shared/synced paths
+  shared:
+    github_repo: https://github.com/mohammadi-hadi/moral-alignment-pipeline.git
+    sync_outputs: true
+    compress_large_files: true
+
+# ==============================================================================
+# Model Routing Configuration
+# ==============================================================================
+model_routing:
+  # Models to run locally (M4 Max with 64GB RAM)
+  local_models:
+    - gpt2
+    - gpt2-medium
+    - gpt2-large
+    - llama-3.2-1b-instruct
+    - llama-3.2-3b-instruct
+    - gemma-2-2b-it
+    - opt-125m
+    - opt-350m
+    - bloomz-560m
+    - qwen-0.5b
+    # API models (run from local)
+    - gpt-4o
+    - gpt-4o-mini
+    - claude-3.5-sonnet
+    - claude-3.5-haiku
+    - gemini-1.5-pro
+    - gemini-1.5-flash
+    - o1-preview
+    - o1-mini
+    
+  # Models to run on server (SURF 4xA100)
+  server_models:
+    - gpt2-xl
+    - llama-3.3-70b-instruct
+    - llama-3.2-90b-instruct
+    - llama-3.2-11b-instruct
+    - gemma-2-27b-it
+    - gemma-2-9b-it
+    - opt-1.3b
+    - opt-2.7b
+    - bloomz-1b7
+    - bloom-176b
+    - qwen-1.8b
+    - qwen-72b
+    - mistral-large-2
+    - mixtral-8x22b-instruct
+    - command-r-plus
+    - falcon-7b
+    - falcon-40b-instruct
+    - gpt-neox-20b
+    - dolly-v2-12b
+    
+  # Automatic routing based on model size
+  auto_routing:
+    enabled: true
+    size_threshold_gb: 8  # Models >8GB go to server
+    memory_threshold_percent: 80  # Switch to server if memory >80%
+
+# ==============================================================================
+# Resource Management
+# ==============================================================================
+resources:
+  local:
+    max_memory_gb: 50  # Leave some RAM for system (64GB total)
+    use_mps: true  # Metal Performance Shaders for M4
+    batch_size: 4
+    max_parallel_api_calls: 5
+    enable_quantization: false  # M4 handles models well without quantization
+    
+  server:
+    max_memory_per_gpu_gb: 40  # A100 has 40GB each
+    num_gpus: 4
+    batch_size: 16
+    enable_quantization: true  # Use 8-bit for very large models
+    distributed: true  # Use multiple GPUs for large models
+    
+# ==============================================================================
+# Deployment Profiles (Updated for Split Execution)
+# ==============================================================================
+deployment_profiles:
+  # Local-only execution (M4 Max)
+  local_only:
+    execution_mode: local
+    models: 
+      - gpt2
+      - llama-3.2-1b-instruct
+      - gpt-4o-mini
+      - claude-3.5-haiku
+    batch_size: 4
+    use_cache: true
+    
+  # Server-only execution (SURF)
+  server_only:
+    execution_mode: server
+    models:
+      - llama-3.3-70b-instruct
+      - gemma-2-27b-it
+      - mixtral-8x22b-instruct
+    batch_size: 16
+    use_cache: true
+    
+  # Hybrid execution (optimal split)
+  hybrid_optimal:
+    execution_mode: hybrid
+    local_models:
+      - gpt2
+      - llama-3.2-3b-instruct
+      - gpt-4o
+      - claude-3.5-sonnet
+    server_models:
+      - llama-3.3-70b-instruct
+      - gemma-2-27b-it
+      - mistral-large-2
+    auto_route: true
+    
+  # Development/testing
+  dev_test:
+    execution_mode: local
+    models:
+      - gpt2
+      - gpt-4o-mini
+    sample_size: 10
+    batch_size: 2
+    
+  # Full evaluation
+  full_evaluation:
+    execution_mode: hybrid
+    models: all
+    auto_route: true
+    sample_size: null  # Full dataset
+    save_all: true
+
+# ==============================================================================
+# Synchronization Settings
+# ==============================================================================
+sync:
+  # Automatic sync between local and server
+  auto_sync: true
+  sync_interval_minutes: 30
+  
+  # What to sync
+  sync_items:
+    code: true
+    configs: true
+    outputs: true
+    models: false  # Models are large, cache separately
+    
+  # Rsync settings for SURF
+  rsync:
+    enabled: true
+    ssh_key: ~/.ssh/surf_key
+    remote_user: your-username
+    remote_host: login.surf.nl
+    remote_path: /data/storage_4_tb/moral-alignment-pipeline
+    
+  # Git sync
+  git:
+    auto_commit: false
+    auto_push: false
+    branch: main
+
+# ==============================================================================
+# Logging and Monitoring
+# ==============================================================================
+logging:
+  level: INFO
+  local_log_dir: ~/Documents/Project06/logs
+  server_log_dir: /data/storage_4_tb/moral-alignment-pipeline/logs
+  
+  # Track resource usage
+  monitor_resources: true
+  log_interval_seconds: 60
+  
+  # Experiment tracking
+  use_wandb: false  # Optional: Weights & Biases integration
+  use_mlflow: false  # Optional: MLflow integration
