@@ -1,0 +1,113 @@
+# Model configurations for moral alignment experiments
+# Each entry specifies a model and its inference parameters
+
+local_models:
+  - name: "gpt2"
+    engine: null
+    is_chat: false
+    max_tokens: 256
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "gpt2-medium"
+    engine: null
+    is_chat: false
+    max_tokens: 256
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "gpt2-large"
+    engine: null
+    is_chat: false
+    max_tokens: 256
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "facebook/opt-125m"
+    engine: null
+    is_chat: false
+    max_tokens: 256
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "facebook/opt-350m"
+    engine: null
+    is_chat: false
+    max_tokens: 256
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "bigscience/bloomz-560m"
+    engine: null
+    is_chat: false
+    max_tokens: 256
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "Qwen/Qwen2-0.5B"
+    engine: null
+    is_chat: false
+    max_tokens: 256
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "meta-llama/Llama-3.3-70B-Instruct"
+    engine: null
+    is_chat: true
+    max_tokens: 512
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "google/gemma-2-9b-it"
+    engine: null
+    is_chat: true
+    max_tokens: 512
+    temperature: 0.7
+    top_p: 0.95
+
+api_models:
+  - name: "gpt-3.5-turbo"
+    engine: "gpt-3.5-turbo-0125"
+    is_chat: true
+    max_tokens: 512
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "gpt-4o"
+    engine: "gpt-4o-2024-08-06"
+    is_chat: true
+    max_tokens: 1024
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "gpt-4o-mini"
+    engine: "gpt-4o-mini"
+    is_chat: true
+    max_tokens: 512
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "gemini-1.5-pro"
+    engine: "gemini-1.5-pro-latest"
+    is_chat: true
+    max_tokens: 1024
+    temperature: 0.7
+    top_p: 0.95
+    
+  - name: "gemini-1.5-flash"
+    engine: "gemini-1.5-flash"
+    is_chat: true
+    max_tokens: 512
+    temperature: 0.7
+    top_p: 0.95
+
+# Sampling parameters for chain-of-thought
+cot_params:
+  num_samples: 5
+  temperature_override: 0.7
+  top_p_override: 0.95
+
+# Peer critique settings
+critique_params:
+  max_length: 60  # Maximum words for critique justification
+  temperature: 0.3  # Lower temperature for more consistent critiques

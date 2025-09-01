@@ -1,0 +1,27 @@
+# Core dependencies
+pandas>=2.0.0
+numpy>=1.22.0
+torch>=2.0.0
+transformers>=4.30.0
+accelerate>=0.20.0
+bitsandbytes>=0.40.0
+
+# Data processing
+pyreadstat>=1.2.0  # For reading SPSS files
+tqdm>=4.65.0
+
+# Statistical analysis
+scipy>=1.10.0
+
+# Visualization
+matplotlib>=3.5.0
+seaborn>=0.12.0
+
+# Jupyter support (optional)
+jupyter>=1.0.0
+ipykernel>=6.0.0
+notebook>=6.5.0
+
+# Additional utilities
+python-dotenv>=1.0.0  # For environment variables
+pyyaml>=6.0  # For configuration files 
