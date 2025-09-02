@@ -76,7 +76,7 @@ class APIBatchRunner:
             priority="MEDIUM"
         ),
         
-        # Future/Hypothetical models (for when available)
+        # Latest/Future models with exact rate limits from your list
         "gpt-5": APIConfig(
             name="gpt-5",
             model_id="gpt-5",
@@ -97,7 +97,51 @@ class APIBatchRunner:
             tpd_limit=200000,
             cost_per_1k_input=0.001,
             cost_per_1k_output=0.003,
-            priority="HIGH"
+            priority="CRITICAL"
+        ),
+        "gpt-5-nano": APIConfig(
+            name="gpt-5-nano",
+            model_id="gpt-5-nano",
+            tpm_limit=60000,
+            rpm_limit=3,
+            rpd_limit=200,
+            tpd_limit=200000,
+            cost_per_1k_input=0.0005,
+            cost_per_1k_output=0.0015,
+            priority="CRITICAL"
+        ),
+        "gpt-4.1": APIConfig(
+            name="gpt-4.1",
+            model_id="gpt-4.1",
+            tpm_limit=10000,
+            rpm_limit=3,
+            rpd_limit=200,
+            tpd_limit=900000,
+            cost_per_1k_input=0.003,
+            cost_per_1k_output=0.012,
+            priority="CRITICAL"
+        ),
+        "gpt-4.1-mini": APIConfig(
+            name="gpt-4.1-mini",
+            model_id="gpt-4.1-mini",
+            tpm_limit=60000,
+            rpm_limit=3,
+            rpd_limit=200,
+            tpd_limit=200000,
+            cost_per_1k_input=0.0008,
+            cost_per_1k_output=0.002,
+            priority="CRITICAL"
+        ),
+        "gpt-4.1-nano": APIConfig(
+            name="gpt-4.1-nano",
+            model_id="gpt-4.1-nano",
+            tpm_limit=60000,
+            rpm_limit=3,
+            rpd_limit=200,
+            tpd_limit=200000,
+            cost_per_1k_input=0.0003,
+            cost_per_1k_output=0.001,
+            priority="CRITICAL"
         ),
         "o3": APIConfig(
             name="o3",
@@ -108,7 +152,18 @@ class APIBatchRunner:
             tpd_limit=90000,
             cost_per_1k_input=0.002,
             cost_per_1k_output=0.008,
-            priority="HIGH"
+            priority="CRITICAL"
+        ),
+        "o4-mini": APIConfig(
+            name="o4-mini",
+            model_id="o4-mini",
+            tpm_limit=100000,
+            rpm_limit=3,
+            rpd_limit=200,
+            tpd_limit=90000,
+            cost_per_1k_input=0.0015,
+            cost_per_1k_output=0.006,
+            priority="CRITICAL"
         ),
     }
     
