@@ -69,6 +69,8 @@ class GPUMonitor:
         Args:
             monitoring_interval: Seconds between monitoring updates
         """
+        global NVML_AVAILABLE
+        
         self.monitoring_interval = monitoring_interval
         self.is_monitoring = False
         self.metrics_queue = queue.Queue(maxsize=1000)
