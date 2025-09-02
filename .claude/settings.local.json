@@ -20,7 +20,8 @@
       "Bash(pkill:*)",
       "Bash(sqlite3:*)",
       "Bash(chmod:*)",
-      "Bash(./RUN_COMMANDS.sh)"
+      "Bash(./RUN_COMMANDS.sh)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

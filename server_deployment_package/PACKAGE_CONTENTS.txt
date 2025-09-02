@@ -1,0 +1,105 @@
+SERVER DEPLOYMENT PACKAGE CONTENTS
+===================================
+
+This package contains everything needed to run moral alignment evaluation
+on your 4xA100 GPU server.
+
+FILES INCLUDED:
+--------------
+
+Core Python Modules:
+  ✓ server_model_runner.py    - Main model runner with VLLM support
+  ✓ download_models.py         - HuggingFace model downloader
+  ✓ run_evaluation.py          - Command-line evaluation script
+
+Setup & Configuration:
+  ✓ setup_server.sh            - Automated server setup script
+  ✓ requirements.txt           - Python dependencies
+  ✓ transfer_to_server.sh      - Script to transfer package to server
+
+Documentation:
+  ✓ README.md                  - Comprehensive setup and usage guide
+  ✓ PACKAGE_CONTENTS.txt       - This file
+
+Jupyter Notebook:
+  ✓ run_all_models.ipynb       - Interactive evaluation notebook
+
+Test Datasets (data/):
+  ✓ test_dataset_100.csv       - 100 samples (quick test, ~15 min)
+  ✓ test_dataset_1000.csv      - 1,000 samples (~2 hours)
+  ✓ test_dataset_2500.csv      - 2,500 samples (~5 hours)
+  ✓ test_dataset_5000.csv      - 5,000 samples (~10 hours)
+
+QUICK START:
+-----------
+
+1. Transfer to server:
+   Edit transfer_to_server.sh with your server details, then run:
+   ./transfer_to_server.sh
+
+2. On the server:
+   ./setup_server.sh
+
+3. Run evaluation:
+   python run_evaluation.py --models qwen2.5-32b --samples 100
+
+MODELS SUPPORTED:
+----------------
+
+CRITICAL Priority (Recommended):
+  • llama3.1-70b (140GB, 2 GPUs)
+  • qwen2.5-32b (64GB, 1 GPU)
+  • mistral-large (94GB, 2 GPUs)
+
+HIGH Priority:
+  • yi-34b (68GB, 1 GPU)
+  • mixtral-8x7b (93GB, 2 GPUs)
+  • falcon-40b (80GB, 2 GPUs)
+
+MEDIUM Priority:
+  • llama3.1-405b (470GB, 4 GPUs)
+  • qwen2.5-72b (144GB, 2 GPUs)
+
+DIRECTORY STRUCTURE ON SERVER:
+-----------------------------
+
+After setup, files will be at:
+/data/storage_4_tb/moral-alignment-pipeline/
+  ├── models/           # Downloaded HuggingFace models
+  ├── data/             # Test datasets
+  ├── outputs/          # Evaluation results
+  ├── cache/            # Model cache
+  └── logs/             # Execution logs
+
+ESTIMATED TIMES:
+---------------
+
+Setup:
+  • Installing dependencies: 5-10 minutes
+  • Downloading 1 model: 10-30 minutes (depends on size)
+  • Downloading all CRITICAL models: 1-2 hours
+
+Evaluation (per model):
+  • 100 samples: 10-15 minutes
+  • 1,000 samples: 1-2 hours
+  • 5,000 samples: 6-10 hours
+
+TROUBLESHOOTING:
+---------------
+
+If you encounter issues:
+1. Check GPU availability: nvidia-smi
+2. Verify CUDA: python -c "import torch; print(torch.cuda.is_available())"
+3. Test with small model: python run_evaluation.py --models qwen2.5-7b --samples 10
+4. Check logs: /data/storage_4_tb/moral-alignment-pipeline/logs/
+
+SUPPORT FILES:
+-------------
+
+All necessary configurations and utilities are included.
+No additional files needed from the main project.
+
+===============================================
+Package prepared: $(date)
+Total size: ~50MB (without models)
+Models will be downloaded on server (~2TB for all)
