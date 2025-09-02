@@ -10,7 +10,15 @@
       "Bash(python run_full_evaluation.py:*)",
       "Bash(python test:*)",
       "Bash(python:*)",
-      "Bash(streamlit run:*)"
+      "Bash(streamlit run:*)",
+      "Bash(ollama list:*)",
+      "Bash(if [ -f .env ])",
+      "Bash(then source .env)",
+      "Bash(fi)",
+      "Bash(source .env)",
+      "Bash(export OPENAI_API_KEY)",
+      "Bash(pkill:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []

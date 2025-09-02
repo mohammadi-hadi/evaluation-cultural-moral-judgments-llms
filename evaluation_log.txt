@@ -1,0 +1,150 @@
+INFO:api_model_runner:APIModelRunner initialized
+INFO:api_model_runner:  Output dir: outputs/comprehensive/api_results
+INFO:api_model_runner:  Cache enabled: True
+INFO:api_model_runner:  Max concurrent: 3
+INFO:local_model_runner:LocalModelRunner initialized
+INFO:local_model_runner:  Device: mps
+INFO:local_model_runner:  Max memory: 50.0GB
+INFO:local_model_runner:  Ollama available: True
+INFO:local_model_runner:  MPS available: True
+INFO:enhanced_parallel_executor:Enhanced Parallel Executor initialized
+INFO:enhanced_parallel_executor:  Auto-resume: True
+INFO:enhanced_parallel_executor:  Max retries: 5
+INFO:enhanced_parallel_executor:======================================================================
+INFO:enhanced_parallel_executor:🚀 STARTING ENHANCED PARALLEL EXECUTION
+INFO:enhanced_parallel_executor:======================================================================
+INFO:enhanced_parallel_executor:🌐 Internet monitoring started
+INFO:enhanced_parallel_executor:📊 Preparing evaluation dataset...
+INFO:wvs_processor:Loading WVS data from sample_data/WVS_Moral.csv
+INFO:wvs_processor:Loaded 94278 samples
+INFO:wvs_processor:Loaded country codes mapping
+INFO:wvs_processor:Processed 2091504 moral judgments
+INFO:wvs_processor:Created evaluation dataset with 1000 samples
+INFO:wvs_processor:Countries: 64
+INFO:wvs_processor:Topics: 22
+INFO:enhanced_parallel_executor:✅ Dataset prepared: 1000 samples
+INFO:enhanced_parallel_executor:   Countries: 64
+INFO:enhanced_parallel_executor:   Topics: 22
+INFO:enhanced_parallel_executor:
+📋 Execution Plan:
+INFO:enhanced_parallel_executor:   Samples: 1000
+INFO:enhanced_parallel_executor:   API Models: ['gpt-3.5-turbo', 'gpt-4o-mini']
+INFO:enhanced_parallel_executor:   Local Models: ['mistral:latest', 'mistral-nemo:latest', 'wizardlm2:7b']
+INFO:enhanced_parallel_executor:   Max retries: 5
+INFO:enhanced_parallel_executor:   Auto-resume: True
+INFO:enhanced_parallel_executor:
+☁️  Starting 2 API models...
+INFO:enhanced_parallel_executor:
+💻 Starting 3 local models...
+INFO:enhanced_parallel_executor:🚀 Starting local model: mistral:latest
+INFO:enhanced_parallel_executor:🚀 Starting local model: mistral-nemo:latest
+INFO:enhanced_parallel_executor:🚀 Starting API model: gpt-3.5-turbo
+======================================================================
+COMPREHENSIVE MORAL ALIGNMENT EVALUATION
+======================================================================
+Dataset: 1000 samples
+API Models: gpt-3.5-turbo, gpt-4o-mini
+Local Models: mistral:latest, mistral-nemo:latest, wizardlm2:7b
+Max API Cost: $10.0
+Output: outputs/comprehensive
+======================================================================
+
+📊 Starting evaluation with real-time monitoring...
+💡 Dashboard available at: http://localhost:8501
+⚠️  Press Ctrl+C to pause (will resume from checkpoint)
+
+
+
+
+Local: mistral-nemo:latest:   0%|          | 0/1000 [00:00<?, ?it/s][A[A[AAPI: gpt-3.5-turbo:   0%|          | 0/1000 [00:00<?, ?it/s]
+
+Local: mistral:latest:   0%|          | 0/1000 [00:00<?, ?it/s][A[AERROR:local_model_runner:Ollama error for mistral:latest: Ollama error: Error: unknown flag: --temperature
+
+ERROR:local_model_runner:Ollama error for mistral-nemo:latest: Ollama error: Error: unknown flag: --temperature
+
+WARNING:enhanced_parallel_executor:⚠️  mistral:latest error (retry 1/5): Ollama error: Error: unknown flag: --temperature
+
+WARNING:enhanced_parallel_executor:⚠️  mistral-nemo:latest error (retry 1/5): Ollama error: Error: unknown flag: --temperature
+
+INFO:enhanced_parallel_executor:🚀 Starting API model: gpt-4o-mini
+
+API: gpt-4o-mini:   0%|          | 0/1000 [00:00<?, ?it/s][AINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+API: gpt-3.5-turbo:   0%|          | 1/1000 [00:01<19:22,  1.16s/it]INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+API: gpt-3.5-turbo:   0%|          | 2/1000 [00:02<18:58,  1.14s/it]INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+API: gpt-3.5-turbo:   0%|          | 3/1000 [00:03<18:48,  1.13s/it]INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+API: gpt-4o-mini:   0%|          | 1/1000 [00:05<1:35:38,  5.74s/it][A[3J[H[2JERROR:local_model_runner:Ollama error for mistral:latest: Ollama error: Error: unknown flag: --temperature
+
+ERROR:local_model_runner:Ollama error for mistral-nemo:latest: Ollama error: Error: unknown flag: --temperature
+
+WARNING:enhanced_parallel_executor:⚠️  mistral:latest error (retry 2/5): Ollama error: Error: unknown flag: --temperature
+
+WARNING:enhanced_parallel_executor:⚠️  mistral-nemo:latest error (retry 2/5): Ollama error: Error: unknown flag: --temperature
+
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+API: gpt-4o-mini:   0%|          | 2/1000 [00:11<1:32:51,  5.58s/it][AINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+API: gpt-4o-mini:   0%|          | 3/1000 [00:18<1:47:25,  6.46s/it][AINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+[3J[H[2JINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+API: gpt-3.5-turbo:   0%|          | 4/1000 [00:24<2:30:25,  9.06s/it]INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+ERROR:local_model_runner:Ollama error for mistral-nemo:latest: Ollama error: Error: unknown flag: --temperature
+
+ERROR:local_model_runner:Ollama error for mistral:latest: Ollama error: Error: unknown flag: --temperature
+
+WARNING:enhanced_parallel_executor:⚠️  mistral:latest error (retry 3/5): Ollama error: Error: unknown flag: --temperature
+
+WARNING:enhanced_parallel_executor:⚠️  mistral-nemo:latest error (retry 3/5): Ollama error: Error: unknown flag: --temperature
+
+[3J[H[2J[3J[H[2JINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+API: gpt-4o-mini:   0%|          | 4/1000 [00:43<3:49:40, 13.84s/it][AINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+API: gpt-3.5-turbo:   0%|          | 5/1000 [00:46<3:44:33, 13.54s/it]INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+API: gpt-4o-mini:   0%|          | 5/1000 [00:49<2:59:08, 10.80s/it][AINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+[3J[H[2JERROR:local_model_runner:Ollama error for mistral-nemo:latest: Ollama error: Error: unknown flag: --temperature
+
+ERROR:local_model_runner:Ollama error for mistral:latest: Ollama error: Error: unknown flag: --temperature
+
+WARNING:enhanced_parallel_executor:⚠️  mistral-nemo:latest error (retry 4/5): Ollama error: Error: unknown flag: --temperature
+
+WARNING:enhanced_parallel_executor:⚠️  mistral:latest error (retry 4/5): Ollama error: Error: unknown flag: --temperature
+
+[3J[H[2JINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+API: gpt-3.5-turbo:   1%|          | 6/1000 [01:07<4:26:28, 16.09s/it]INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+API: gpt-4o-mini:   1%|          | 6/1000 [01:14<4:19:05, 15.64s/it][AINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+[3J[H[2J[3J[H[2JINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+API: gpt-3.5-turbo:   1%|          | 7/1000 [01:28<4:55:53, 17.88s/it]INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+[3J[H[2JINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+API: gpt-4o-mini:   1%|          | 7/1000 [01:39<5:11:20, 18.81s/it][AINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+ERROR:local_model_runner:Ollama error for mistral:latest: Ollama error: Error: unknown flag: --temperature
+
+ERROR:local_model_runner:Ollama error for mistral-nemo:latest: Ollama error: Error: unknown flag: --temperature
+
+ERROR:enhanced_parallel_executor:❌ mistral:latest failed after 5 retries
+WARNING:enhanced_parallel_executor:🧹 mistral:latest: Cleaning up after failures
+INFO:local_model_runner:Models cleaned up, memory freed
+ERROR:enhanced_parallel_executor:❌ mistral-nemo:latest failed after 5 retries
+WARNING:enhanced_parallel_executor:🧹 mistral-nemo:latest: Cleaning up after failures
+INFO:local_model_runner:Models cleaned up, memory freed
+[3J[H[2JINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+API: gpt-3.5-turbo:   1%|          | 8/1000 [01:49<5:13:21, 18.95s/it]INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+API: gpt-3.5-turbo:   1%|          | 9/1000 [01:51<3:41:45, 13.43s/it]INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+INFO:openai._base_client:Retrying request to /chat/completions in 20.000000 seconds
+[3J[H[2JINFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+API: gpt-4o-mini:   1%|          | 8/1000 [02:03<5:38:36, 20.48s/it][A
