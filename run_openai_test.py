@@ -6,21 +6,26 @@ Comprehensive testing script for OpenAI models with visualization
 
 import os
 import sys
+import time
 import argparse
 import logging
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
+import numpy as np
 import json
+from typing import Dict, List
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent))
 
 # Local imports
 from env_loader import get_env_loader
-from test_openai_models import OpenAIModelTester
-from visualization_engine import VisualizationEngine
-from output_generator import OutputGenerator
+from wvs_processor import WVSProcessor
+from moral_alignment_tester import MoralAlignmentTester
+from validation_suite import ValidationSuite
+from paper_outputs import PaperOutputGenerator
+from moral_visualization import MoralVisualizationEngine
 
 # Configure logging
 logging.basicConfig(
@@ -44,30 +49,15 @@ def main():
     )
     
     parser.add_argument(
-        '--models',
-        nargs='+',
-        default=None,
-        help='Specific models to test (default: all OpenAI models)'
+        '--model',
+        default='gpt-3.5-turbo',
+        help='OpenAI model to test (default: gpt-3.5-turbo)'
     )
     
     parser.add_argument(
         '--quick-test',
         action='store_true',
         help='Run quick test with minimal samples'
-    )
-    
-    parser.add_argument(
-        '--visualize',
-        action='store_true',
-        default=True,
-        help='Generate visualizations after testing'
-    )
-    
-    parser.add_argument(
-        '--export',
-        action='store_true',
-        default=True,
-        help='Export results in multiple formats'
     )
     
     args = parser.parse_args()
@@ -81,139 +71,161 @@ def main():
     env_loader = get_env_loader()
     env_info = env_loader.get_environment_info()
     
-    if not env_info['has_openai']:
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
         logger.error("❌ OpenAI API key not configured!")
         logger.info("Please add your OpenAI API key to the .env file")
         return 1
     
     logger.info(f"✅ OpenAI API configured")
-    logger.info(f"Available API models: {len(env_info['api_models'])}")
     
-    # Step 2: Run tests
-    logger.info("\n🧪 Step 2: Testing OpenAI Models")
+    # Step 2: Initialize components
+    logger.info("\n🔧 Step 2: Initializing Components")
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    output_dir = Path(f"outputs/openai_test_{timestamp}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Initialize WVS processor
+    wvs = WVSProcessor()
+    wvs.load_data()
+    wvs.process_moral_scores()
+    
+    # Initialize tester
+    tester = MoralAlignmentTester(output_dir=output_dir)
+    
+    # Step 3: Prepare test data
+    logger.info("\n📊 Step 3: Preparing Test Data")
     
     if args.quick_test:
-        sample_size = 2
-        logger.info("Running quick test with 2 samples")
+        sample_size = 3
     else:
         sample_size = args.sample_size
     
-    tester = OpenAIModelTester(sample_size=sample_size)
+    eval_data = wvs.create_evaluation_dataset(
+        n_samples=sample_size,
+        topics=wvs.KEY_TOPICS[:5],  # Only 5 topics for quick test
+        stratified=True
+    )
     
-    # Override models if specified
-    if args.models:
-        tester.models = args.models
-        logger.info(f"Testing specific models: {args.models}")
+    logger.info(f"Created {len(eval_data)} test samples")
+    logger.info(f"Countries: {eval_data['country'].nunique()}")
+    logger.info(f"Topics: {eval_data['topic'].nunique()}")
     
-    # Run comprehensive test
-    test_summary = tester.run_comprehensive_test()
+    # Step 4: Run tests with rate limiting
+    logger.info(f"\n🧪 Step 4: Testing {args.model}")
+    logger.info("⏳ This will take a few minutes due to rate limiting...")
     
-    if test_summary.get('error'):
-        logger.error(f"Testing failed: {test_summary['error']}")
-        return 1
+    results = {
+        'scores': [],
+        'metrics': {},
+        'model': args.model,
+        'timestamp': timestamp
+    }
     
-    logger.info(f"✅ Tested {test_summary['models_tested']} models successfully")
-    
-    # Step 3: Analyze results
-    logger.info("\n📊 Step 3: Analyzing Results")
-    
-    # Get agreement analysis
-    agreement = tester.analyze_model_agreement()
-    
-    # Generate test report
-    report = tester.generate_test_report()
-    
-    # Step 4: Generate visualizations
-    if args.visualize:
-        logger.info("\n📈 Step 4: Generating Visualizations")
+    for idx, row in eval_data.iterrows():
+        print(f"\r  Processing {idx+1}/{len(eval_data)}...", end="", flush=True)
         
-        viz_engine = VisualizationEngine()
-        
-        # Convert results to DataFrame for visualization
-        all_results = []
-        for model, results in tester.results.items():
-            all_results.extend(results)
-        
-        if all_results:
-            df = pd.DataFrame(all_results)
+        try:
+            # Test with log-probability method
+            lp_result = tester._test_logprob_scoring(args.model, row)
+            if lp_result:
+                lp_result['ground_truth'] = row['normalized_score']
+                results['scores'].append(lp_result)
             
-            # Create visualizations
-            plots_created = []
+            time.sleep(0.5)  # Rate limit
             
-            # Performance comparison
-            plot_path = viz_engine.plot_model_performance_comparison(df)
-            if plot_path:
-                plots_created.append(plot_path)
-                logger.info(f"Created performance comparison: {plot_path}")
+            # Test with direct scoring method
+            dir_result = tester._test_direct_scoring(args.model, row)
+            if dir_result:
+                dir_result['ground_truth'] = row['normalized_score']
+                results['scores'].append(dir_result)
             
-            # Agreement heatmap
-            if agreement:
-                plot_path = viz_engine.plot_model_agreement_heatmap(agreement)
-                if plot_path:
-                    plots_created.append(plot_path)
-                    logger.info(f"Created agreement heatmap: {plot_path}")
+            time.sleep(0.5)  # Rate limit
             
-            # Response patterns
-            plot_path = viz_engine.plot_response_patterns(df)
-            if plot_path:
-                plots_created.append(plot_path)
-                logger.info(f"Created response patterns: {plot_path}")
-            
-            # Cost analysis
-            plot_path = viz_engine.plot_cost_analysis(tester.models, sample_size * 200)
-            if plot_path:
-                plots_created.append(plot_path)
-                logger.info(f"Created cost analysis: {plot_path}")
-            
-            # Dashboard
-            plot_path = viz_engine.create_dashboard(df)
-            if plot_path:
-                plots_created.append(plot_path)
-                logger.info(f"Created dashboard: {plot_path}")
-            
-            logger.info(f"✅ Generated {len(plots_created)} visualizations")
+        except Exception as e:
+            logger.warning(f"\nError processing sample {idx}: {e}")
+            continue
     
-    # Step 5: Export results
-    if args.export:
-        logger.info("\n💾 Step 5: Exporting Results")
+    print()  # New line after progress
+    logger.info(f"✅ Processed {len(results['scores'])} scores")
+    
+    # Step 5: Calculate metrics
+    logger.info("\n📈 Step 5: Calculating Metrics")
+    
+    if results['scores']:
+        df = pd.DataFrame(results['scores'])
         
-        output_gen = OutputGenerator()
+        for method in ['logprob', 'direct']:
+            method_df = df[df['method'] == method]
+            if len(method_df) > 1:
+                corr = method_df[['ground_truth', 'model_score']].corr().iloc[0, 1]
+                mae = (method_df['model_score'] - method_df['ground_truth']).abs().mean()
+                
+                results['metrics'][f'correlation_{method}'] = float(corr)
+                results['metrics'][f'mae_{method}'] = float(mae)
+                results['metrics'][f'n_{method}'] = len(method_df)
+                
+                print(f"\n{method.upper()} Method:")
+                print(f"  Correlation: {corr:.3f}")
+                print(f"  MAE: {mae:.3f}")
+                print(f"  Samples: {len(method_df)}")
+    
+    # Step 6: Save results
+    logger.info("\n💾 Step 6: Saving Results")
+    
+    results_file = output_dir / f"{args.model}_results.json"
+    with open(results_file, 'w') as f:
+        json.dump(results, f, indent=2, default=str)
+    
+    # Create comprehensive results
+    comprehensive = {
+        'model_results': {args.model: results},
+        'run_metadata': {
+            'timestamp': timestamp,
+            'n_samples': sample_size,
+            'models_tested': [args.model]
+        }
+    }
+    
+    comp_file = output_dir / "comprehensive_results.json"
+    with open(comp_file, 'w') as f:
+        json.dump(comprehensive, f, indent=2, default=str)
+    
+    # Step 7: Generate paper outputs and visualizations
+    logger.info("\n📄 Step 7: Generating Paper Outputs and Visualizations")
+    
+    paper_gen = PaperOutputGenerator(
+        results_dir=output_dir,
+        output_dir=output_dir / "paper"
+    )
+    
+    outputs = paper_gen.generate_all_outputs()
+    logger.info(f"Generated {len(outputs)} paper outputs")
+    
+    # Generate visualizations
+    if results['scores']:
+        viz = MoralVisualizationEngine(output_dir=output_dir / "figures")
+        viz_df = pd.DataFrame(results['scores'])
+        viz_df['model'] = args.model
         
-        # Save test results first
-        results_file = output_gen.results_dir / f"openai_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(results_file, 'w') as f:
-            json.dump({
-                'summary': test_summary,
-                'agreement': agreement,
-                'results': all_results if 'all_results' in locals() else []
-            }, f, indent=2, default=str)
-        
-        # Generate all outputs
-        outputs = output_gen.generate_all_outputs()
-        
-        logger.info(f"✅ Exported {len(outputs)} output formats")
+        plots = viz.create_all_plots(results={args.model: results}, df=viz_df)
+        logger.info(f"Generated {len(plots)} visualizations")
     
     # Final summary
     logger.info("\n" + "=" * 60)
     logger.info("✅ Testing Complete!")
     logger.info("=" * 60)
-    logger.info(f"Models tested: {', '.join(test_summary['models_tested'])}")
-    logger.info(f"Total tests: {test_summary['total_tests']}")
-    logger.info(f"Success rate: {test_summary['successful_tests']}/{test_summary['total_tests']}")
-    logger.info(f"Total time: {test_summary['total_time']:.2f}s")
-    logger.info(f"Estimated cost: ${test_summary['estimated_cost']:.2f}")
+    logger.info(f"Model tested: {args.model}")
+    logger.info(f"Total tests: {len(results['scores'])}")
     
-    # Print cost breakdown
-    logger.info("\n💰 Cost Breakdown:")
-    for model in test_summary['models_tested']:
-        cost_info = env_loader.estimate_costs(model, sample_size)
-        logger.info(f"  {model}: ${cost_info['estimated_cost_usd']:.2f}")
+    for key, value in results['metrics'].items():
+        if isinstance(value, float):
+            logger.info(f"  {key}: {value:.3f}")
+        else:
+            logger.info(f"  {key}: {value}")
     
-    logger.info("\n📁 Output Locations:")
-    logger.info(f"  Results: outputs/")
-    logger.info(f"  Plots: outputs/plots/")
-    logger.info(f"  Tables: outputs/tables/")
-    logger.info(f"  Reports: outputs/reports/")
+    logger.info(f"\n📁 All outputs saved to: {output_dir}")
     
     return 0
 
