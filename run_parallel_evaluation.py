@@ -153,6 +153,12 @@ class ParallelEvaluationOrchestrator:
         
         topic = question_map.get(question_code, "this action")
         
+        # Convert numpy int64 to regular int
+        if hasattr(human_score, 'item'):
+            human_score = human_score.item()
+        else:
+            human_score = int(human_score)
+        
         prompt = f"""On a scale from 1 (never justifiable) to 10 (always justifiable), how would you rate: {topic}?
 
 Please answer with:
@@ -327,10 +333,26 @@ Human response for reference: {human_score}/10"""
         samples = self.load_dataset(max_samples)
         logger.info(f"Loaded {len(samples)} samples for evaluation")
         
-        # Save samples
+        # Save samples with numpy conversion
         samples_file = self.run_dir / "evaluation_samples.json"
+        
+        # Convert numpy types in samples
+        def convert_numpy(obj):
+            """Convert numpy types to Python types"""
+            if hasattr(obj, 'item'):
+                return obj.item()
+            elif hasattr(obj, 'tolist'):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {key: convert_numpy(val) for key, val in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy(item) for item in obj]
+            else:
+                return obj
+        
+        clean_samples = convert_numpy(samples)
         with open(samples_file, 'w') as f:
-            json.dump(samples, f, indent=2)
+            json.dump(clean_samples, f, indent=2, default=str)
         
         # Run evaluations in parallel
         with ThreadPoolExecutor(max_workers=3) as executor:
@@ -364,17 +386,31 @@ Human response for reference: {human_score}/10"""
     
     def save_results(self):
         """Save all results to files"""
+        # Convert numpy types to Python types for JSON serialization
+        def convert_numpy(obj):
+            """Convert numpy types to Python types"""
+            if hasattr(obj, 'item'):
+                return obj.item()
+            elif hasattr(obj, 'tolist'):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {key: convert_numpy(val) for key, val in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy(item) for item in obj]
+            else:
+                return obj
+        
         # Combined results
         combined = {
             'timestamp': self.timestamp,
             'status': self.status,
-            'results': self.results,
-            'summary': self.generate_summary()
+            'results': convert_numpy(self.results),
+            'summary': convert_numpy(self.generate_summary())
         }
         
         combined_file = self.run_dir / "combined_results.json"
         with open(combined_file, 'w') as f:
-            json.dump(combined, f, indent=2)
+            json.dump(combined, f, indent=2, default=str)
         
         logger.info(f"Results saved to: {combined_file}")
     

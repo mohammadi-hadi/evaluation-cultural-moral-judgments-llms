@@ -18,7 +18,9 @@
       "Bash(source .env)",
       "Bash(export OPENAI_API_KEY)",
       "Bash(pkill:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(chmod:*)",
+      "Bash(./RUN_COMMANDS.sh)"
     ],
     "deny": [],
     "ask": []
