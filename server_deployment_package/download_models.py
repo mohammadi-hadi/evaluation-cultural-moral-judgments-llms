@@ -156,53 +156,7 @@ class ModelDownloader:
                 size_gb=14,
                 priority="MEDIUM",
                 notes="Vision-language model 7B"
-            ),
-                priority="MEDIUM"
-            ),
-            ModelConfig(
-                name="gpt2-large",
-                hf_path="openai-community/gpt2-large",
-                size_gb=3.0,
-                priority="MEDIUM"
-            ),
-            ModelConfig(
-                name="gemma-2b",
-                hf_path="google/gemma-2-2b-it",
-                size_gb=4.0,
-                priority="HIGH",
-                notes="Modern baseline"
-            ),
-            ModelConfig(
-                name="llama3.2-1b",
-                hf_path="meta-llama/Llama-3.2-1B-Instruct",
-                size_gb=2.0,
-                priority="HIGH"
-            ),
-            ModelConfig(
-                name="llama3.2-3b",
-                hf_path="meta-llama/Llama-3.2-3B-Instruct",
-                size_gb=6.0,
-                priority="HIGH",
-                notes="Latest Llama, 128K context"
-            ),
-            ModelConfig(
-                name="phi-3.5-mini",
-                hf_path="microsoft/Phi-3.5-mini-instruct",
-                size_gb=8.0,
-                priority="HIGH"
-            ),
-            ModelConfig(
-                name="qwen2.5-1.5b",
-                hf_path="Qwen/Qwen2.5-1.5B-Instruct",
-                size_gb=3.0,
-                priority="MEDIUM"
-            ),
-            ModelConfig(
-                name="qwen2.5-3b",
-                hf_path="Qwen/Qwen2.5-3B-Instruct",
-                size_gb=6.0,
-                priority="MEDIUM"
-            ),
+            )
         ],
         
         # Medium models (7-14GB)
