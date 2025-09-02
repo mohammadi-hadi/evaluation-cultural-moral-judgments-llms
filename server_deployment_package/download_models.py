@@ -13,7 +13,7 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass
 import subprocess
 import torch
-from huggingface_hub import snapshot_download, hf_hub_download
+from huggingface_hub import snapshot_download, hf_hub_download, login, HfFolder
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import gc
 
@@ -228,10 +228,63 @@ class ModelDownloader:
         self.status_file = self.base_dir / "download_status.json"
         self.status = self._load_status()
         
+        # Set up HuggingFace authentication
+        self._setup_hf_authentication()
+        
         logger.info(f"ModelDownloader initialized")
         logger.info(f"  Base directory: {self.base_dir}")
         logger.info(f"  Models directory: {self.models_dir}")
         logger.info(f"  Using symlinks: {self.use_symlinks}")
+    
+    def _setup_hf_authentication(self):
+        """Set up HuggingFace authentication for gated models"""
+        # Try environment variables first
+        hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+        
+        if hf_token:
+            try:
+                login(token=hf_token, add_to_git_credential=True)
+                logger.info("✅ Authenticated with HuggingFace using token")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to authenticate with provided token: {e}")
+        
+        # Try to use cached credentials
+        try:
+            token = HfFolder.get_token()
+            if token:
+                logger.info("✅ Using cached HuggingFace credentials")
+                return
+        except Exception:
+            pass
+        
+        # No authentication found
+        logger.warning("⚠️  No HuggingFace authentication found")
+        logger.warning("   Some models require authentication. To fix:")
+        logger.warning("   1. Get token from https://huggingface.co/settings/tokens")
+        logger.warning("   2. Set HF_TOKEN environment variable")
+        logger.warning("   3. Or run: huggingface-cli login")
+        
+        # Add list of open models that don't require authentication
+        self._log_open_alternatives()
+    
+    def _log_open_alternatives(self):
+        """Log available open models that don't require authentication"""
+        open_models = [
+            ("qwen2.5-7b", "Qwen/Qwen2.5-7B-Instruct", "14GB"),
+            ("qwen2.5-14b", "Qwen/Qwen2.5-14B-Instruct", "28GB"), 
+            ("qwen2.5-32b", "Qwen/Qwen2.5-32B-Instruct", "64GB"),
+            ("qwen2.5-72b", "Qwen/Qwen2.5-72B-Instruct", "140GB"),
+            ("qwq-32b", "Qwen/QwQ-32B-Preview", "64GB"),
+            ("phi-3.5-mini", "microsoft/Phi-3.5-mini-instruct", "8GB"),
+            ("falcon-7b", "tiiuae/falcon-7b-instruct", "14GB"),
+            ("mpt-7b", "mosaicml/mpt-7b-instruct", "14GB"),
+            ("stablelm-3b", "stabilityai/stablelm-3b-4e1t", "6GB")
+        ]
+        
+        logger.info("📂 Available open models (no authentication required):")
+        for name, path, size in open_models:
+            logger.info(f"   ✓ {name} ({size}) - {path}")
     
     def _load_status(self) -> Dict:
         """Load download status from file"""
@@ -306,7 +359,7 @@ class ModelDownloader:
             self.status["downloaded"].append(model_name)
             self._save_status()
             
-            logger.info(f"Successfully downloaded {model_name}")
+            logger.info(f"✅ Successfully downloaded {model_name}")
             
             # Clear GPU cache
             if torch.cuda.is_available():
@@ -316,7 +369,18 @@ class ModelDownloader:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to download {model_name}: {e}")
+            error_msg = str(e)
+            
+            # Check if it's an authentication error
+            if "401" in error_msg or "Access to model" in error_msg or "restricted" in error_msg:
+                logger.error(f"❌ {model_name}: Authentication required")
+                logger.error(f"   This model requires access approval and authentication")
+                logger.error(f"   1. Visit: https://huggingface.co/{model_config.hf_path}")
+                logger.error(f"   2. Click 'Accept License' if prompted")
+                logger.error(f"   3. Set HF_TOKEN environment variable")
+                logger.error(f"   4. Or run: huggingface-cli login")
+            else:
+                logger.error(f"❌ Failed to download {model_name}: {e}")
             
             if model_name in self.status["in_progress"]:
                 self.status["in_progress"].remove(model_name)

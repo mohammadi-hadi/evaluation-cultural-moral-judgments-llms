@@ -295,7 +295,7 @@ class ServerModelRunner:
         return available
     
     def load_model_vllm(self, model_config: ServerModelConfig):
-        """Load model using VLLM"""
+        """Load model using VLLM with optimized configuration"""
         model_path = self.models_dir / model_config.name
         
         if not model_path.exists():
@@ -307,20 +307,49 @@ class ServerModelRunner:
         else:
             quantization = None
         
+        # Determine optimal tensor parallel size based on model size
+        optimal_tp_size = min(self.tensor_parallel_size, model_config.recommended_gpus)
+        
+        # Optimize batch processing based on model size and available memory
+        if model_config.size_gb > 60:  # Large models (70B+)
+            max_num_seqs = 16
+            max_num_batched_tokens = 16384
+            gpu_memory_util = 0.95
+        elif model_config.size_gb > 25:  # Medium models (32B)
+            max_num_seqs = 32  
+            max_num_batched_tokens = 8192
+            gpu_memory_util = 0.95
+        else:  # Small models (<25GB)
+            max_num_seqs = 64
+            max_num_batched_tokens = 8192
+            gpu_memory_util = 0.95
+        
         logger.info(f"Loading {model_config.name} with VLLM...")
+        logger.info(f"  💾 Size: {model_config.size_gb}GB")
+        logger.info(f"  🔧 Tensor parallel: {optimal_tp_size} GPUs")
+        logger.info(f"  📦 Max batch sequences: {max_num_seqs}")
+        logger.info(f"  🚀 Max batched tokens: {max_num_batched_tokens}")
         
         self.loaded_model = LLM(
             model=str(model_path),
-            tensor_parallel_size=min(self.tensor_parallel_size, model_config.recommended_gpus),
+            tensor_parallel_size=optimal_tp_size,
             dtype="float16",
             quantization=quantization,
             trust_remote_code=True,
             max_model_len=model_config.max_length,
-            gpu_memory_utilization=0.9,
+            gpu_memory_utilization=gpu_memory_util,
+            max_num_seqs=max_num_seqs,
+            max_num_batched_tokens=max_num_batched_tokens,
+            disable_log_stats=True,  # Reduce log noise
+            enforce_eager=True,  # Skip torch.compile for faster loading
+            enable_prefix_caching=True,  # Cache common prefixes
         )
         
         self.loaded_model_name = model_config.name
-        logger.info(f"Model {model_config.name} loaded successfully with VLLM")
+        self.current_batch_size = max_num_seqs  # Store for batch processing
+        
+        logger.info(f"✅ Model {model_config.name} loaded successfully with VLLM")
+        logger.info(f"   🎯 Ready for batch processing (up to {max_num_seqs} parallel requests)")
     
     def load_model_transformers(self, model_config: ServerModelConfig):
         """Load model using Transformers"""
@@ -508,6 +537,128 @@ class ServerModelRunner:
                 pass
         
         return None
+    
+    def generate_batch(self, prompts: List[str], **kwargs) -> List[Dict[str, Any]]:
+        """Generate responses for multiple prompts in a single batch
+        
+        Args:
+            prompts: List of input prompts
+            **kwargs: Generation parameters
+            
+        Returns:
+            List of dictionaries with responses and metadata
+        """
+        if self.loaded_model is None:
+            raise RuntimeError("No model loaded")
+        
+        if not self.use_vllm:
+            # Fallback to sequential processing for non-VLLM
+            return [self.generate(prompt, **kwargs) for prompt in prompts]
+        
+        start_time = time.time()
+        batch_size = len(prompts)
+        
+        logger.info(f"🚀 Processing batch of {batch_size} prompts...")
+        
+        try:
+            # Create sampling parameters
+            sampling_params = SamplingParams(
+                temperature=kwargs.get('temperature', 0.7),
+                top_p=kwargs.get('top_p', 0.9),
+                max_tokens=kwargs.get('max_tokens', 512),
+            )
+            
+            # Generate responses for all prompts at once
+            outputs = self.loaded_model.generate(prompts, sampling_params)
+            
+            # Process results
+            results = []
+            for i, output in enumerate(outputs):
+                response_text = output.outputs[0].text
+                choice = self._extract_choice(response_text)
+                
+                results.append({
+                    'model': self.loaded_model_name,
+                    'response': response_text,
+                    'choice': choice,
+                    'inference_time': time.time() - start_time,  # Total batch time
+                    'success': True,
+                    'batch_index': i,
+                    'batch_size': batch_size
+                })
+            
+            total_time = time.time() - start_time
+            logger.info(f"✅ Batch complete: {batch_size} samples in {total_time:.1f}s ({batch_size/total_time:.1f} samples/sec)")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Batch generation error: {e}")
+            # Return failed results for all prompts
+            failed_results = []
+            for i in range(len(prompts)):
+                failed_results.append({
+                    'model': self.loaded_model_name,
+                    'response': None,
+                    'error': str(e),
+                    'inference_time': time.time() - start_time,
+                    'success': False,
+                    'batch_index': i,
+                    'batch_size': batch_size
+                })
+            return failed_results
+    
+    def evaluate_model_batch(self, model_name: str, samples: List[Dict], 
+                           batch_size: Optional[int] = None) -> List[Dict]:
+        """Evaluate model on samples using batch processing
+        
+        Args:
+            model_name: Name of model to evaluate
+            samples: List of sample dictionaries with 'id' and 'prompt' keys
+            batch_size: Override batch size (uses model's optimal if None)
+            
+        Returns:
+            List of evaluation results
+        """
+        if model_name not in self.MODEL_CONFIGS:
+            raise ValueError(f"Unknown model: {model_name}")
+        
+        # Load model if needed
+        if self.loaded_model_name != model_name:
+            self.load_model(model_name)
+        
+        # Use model's optimal batch size if not specified
+        if batch_size is None:
+            batch_size = getattr(self, 'current_batch_size', 32)
+        
+        all_results = []
+        total_batches = (len(samples) + batch_size - 1) // batch_size
+        
+        logger.info(f"📊 Evaluating {model_name} on {len(samples)} samples")
+        logger.info(f"   📦 Batch size: {batch_size}")
+        logger.info(f"   🔢 Total batches: {total_batches}")
+        
+        from tqdm import tqdm
+        
+        # Process in batches with progress bar
+        for i in tqdm(range(0, len(samples), batch_size), 
+                     desc=f"Evaluating {model_name}", 
+                     unit="batch"):
+            
+            batch_samples = samples[i:i + batch_size]
+            prompts = [sample['prompt'] for sample in batch_samples]
+            
+            # Generate responses
+            batch_results = self.generate_batch(prompts)
+            
+            # Add sample IDs to results
+            for j, result in enumerate(batch_results):
+                result['sample_id'] = batch_samples[j]['id']
+                all_results.append(result)
+        
+        logger.info(f"✅ {model_name} evaluation complete: {len(all_results)} results")
+        
+        return all_results
     
     def run_evaluation(self,
                        model_names: List[str],
