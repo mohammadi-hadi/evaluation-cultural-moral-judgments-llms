@@ -55,18 +55,31 @@ class ServerModelRunner:
     
     # Model configurations optimized for 4xA100 (320GB total GPU memory)
     MODEL_CONFIGS = {
-        # Medium models (can run on 1 GPU)
-        "mistral-7b": ServerModelConfig(
-            name="mistral-7b",
-            hf_path="mistralai/Mistral-7B-Instruct-v0.3",
-            size_gb=14,
-            gpu_memory_gb=20,
+        # ================================================================
+        # SMALL MODELS (1 GPU, <25GB)
+        # ================================================================
+        
+        # Llama family - Small
+        "llama3.2:1b": ServerModelConfig(
+            name="llama3.2:1b",
+            hf_path="meta-llama/Llama-3.2-1B-Instruct",
+            size_gb=2,
+            gpu_memory_gb=8,
             recommended_gpus=1,
-            priority="CRITICAL",
-            notes="Excellent general purpose"
+            priority="HIGH",
+            notes="Ultra-fast small model"
         ),
-        "llama3.1-8b": ServerModelConfig(
-            name="llama3.1-8b",
+        "llama3.2:3b": ServerModelConfig(
+            name="llama3.2:3b", 
+            hf_path="meta-llama/Llama-3.2-3B-Instruct",
+            size_gb=6,
+            gpu_memory_gb=12,
+            recommended_gpus=1,
+            priority="HIGH",
+            notes="Efficient small model"
+        ),
+        "llama3.1:8b": ServerModelConfig(
+            name="llama3.1:8b",
             hf_path="meta-llama/Llama-3.1-8B-Instruct",
             size_gb=16,
             gpu_memory_gb=24,
@@ -74,29 +87,116 @@ class ServerModelRunner:
             priority="CRITICAL",
             notes="Well-balanced, 128K context"
         ),
-        "qwen2.5-7b": ServerModelConfig(
-            name="qwen2.5-7b",
+        "llama3:8b": ServerModelConfig(
+            name="llama3:8b",
+            hf_path="meta-llama/Meta-Llama-3-8B-Instruct",
+            size_gb=16,
+            gpu_memory_gb=24,
+            recommended_gpus=1,
+            priority="HIGH",
+            notes="Original Llama 3 8B"
+        ),
+        
+        # Mistral family - Small  
+        "mistral:7b": ServerModelConfig(
+            name="mistral:7b",
+            hf_path="mistralai/Mistral-7B-Instruct-v0.3",
+            size_gb=14,
+            gpu_memory_gb=20,
+            recommended_gpus=1,
+            priority="CRITICAL",
+            notes="Excellent general purpose"
+        ),
+        
+        # Qwen family - Small
+        "qwen2.5:7b": ServerModelConfig(
+            name="qwen2.5:7b",
             hf_path="Qwen/Qwen2.5-7B-Instruct",
             size_gb=14,
             gpu_memory_gb=20,
             recommended_gpus=1,
-            priority="HIGH"
+            priority="CRITICAL",
+            notes="High-performance Chinese model"
         ),
-        "qwen2.5-14b": ServerModelConfig(
-            name="qwen2.5-14b",
-            hf_path="Qwen/Qwen2.5-14B-Instruct",
-            size_gb=28,
-            gpu_memory_gb=40,
+        "qwen3:8b": ServerModelConfig(
+            name="qwen3:8b",
+            hf_path="Qwen/Qwen3-8B-Instruct", 
+            size_gb=16,
+            gpu_memory_gb=24,
             recommended_gpus=1,
-            priority="HIGH"
+            priority="HIGH",
+            notes="Latest Qwen 3 generation"
         ),
-        "gemma2-9b": ServerModelConfig(
-            name="gemma2-9b",
+        
+        # Gemma family - Small
+        "gemma:7b": ServerModelConfig(
+            name="gemma:7b",
+            hf_path="google/gemma-7b-it",
+            size_gb=14,
+            gpu_memory_gb=20,
+            recommended_gpus=1,
+            priority="HIGH",
+            notes="Google's instruction-tuned"
+        ),
+        "gemma2:9b": ServerModelConfig(
+            name="gemma2:9b",
             hf_path="google/gemma-2-9b-it",
             size_gb=18,
             gpu_memory_gb=25,
             recommended_gpus=1,
-            priority="HIGH"
+            priority="HIGH",
+            notes="Improved Gemma 2"
+        ),
+        "gemma3:4b": ServerModelConfig(
+            name="gemma3:4b",
+            hf_path="google/gemma-3-4b-it",
+            size_gb=8,
+            gpu_memory_gb=14,
+            recommended_gpus=1,
+            priority="HIGH", 
+            notes="Latest Gemma generation"
+        ),
+        
+        # Phi family - Small
+        "phi3:3.8b": ServerModelConfig(
+            name="phi3:3.8b",
+            hf_path="microsoft/Phi-3-mini-4k-instruct",
+            size_gb=8,
+            gpu_memory_gb=14,
+            recommended_gpus=1,
+            priority="HIGH",
+            notes="Microsoft's efficient model"
+        ),
+        "phi3:14b": ServerModelConfig(
+            name="phi3:14b", 
+            hf_path="microsoft/Phi-3-medium-4k-instruct",
+            size_gb=28,
+            gpu_memory_gb=40,
+            recommended_gpus=1,
+            priority="HIGH",
+            notes="Medium Phi-3"
+        ),
+        
+        # DeepSeek family - Small
+        "deepseek-r1:8b": ServerModelConfig(
+            name="deepseek-r1:8b",
+            hf_path="deepseek-ai/DeepSeek-R1-Distill-Qwen-8B",
+            size_gb=16,
+            gpu_memory_gb=24,
+            recommended_gpus=1,
+            priority="HIGH",
+            notes="DeepSeek reasoning model"
+        ),
+        
+        # Vision models - Small
+        "llava:7b": ServerModelConfig(
+            name="llava:7b",
+            hf_path="llava-hf/llava-1.5-7b-hf",
+            size_gb=14,
+            gpu_memory_gb=20,
+            recommended_gpus=1,
+            priority="MEDIUM",
+            notes="Vision-language model"
         ),
         
         # Large models (1-2 GPUs)

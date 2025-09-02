@@ -33,21 +33,130 @@ class ModelConfig:
 class ModelDownloader:
     """Download and prepare models for server deployment"""
     
-    # Models to download - organized by size
+    # Models to download - organized by size and priority
     MODELS = {
-        # Small models (< 5GB)
+        # Small models (< 10GB) - High throughput on single GPU
         "small": [
+            # Baseline models
             ModelConfig(
                 name="gpt2",
                 hf_path="openai-community/gpt2",
                 size_gb=0.5,
                 priority="CRITICAL",
-                notes="Essential baseline"
+                notes="Essential baseline model"
+            ),
+            
+            # Llama family - Small
+            ModelConfig(
+                name="llama3.2:1b",
+                hf_path="meta-llama/Llama-3.2-1B-Instruct",
+                size_gb=2,
+                priority="HIGH",
+                notes="Ultra-fast small Llama"
             ),
             ModelConfig(
-                name="gpt2-medium",
-                hf_path="openai-community/gpt2-medium",
-                size_gb=1.5,
+                name="llama3.2:3b", 
+                hf_path="meta-llama/Llama-3.2-3B-Instruct",
+                size_gb=6,
+                priority="HIGH",
+                notes="Efficient small Llama"
+            ),
+            ModelConfig(
+                name="llama3.1:8b",
+                hf_path="meta-llama/Llama-3.1-8B-Instruct",
+                size_gb=16,
+                priority="CRITICAL",
+                notes="Latest Llama 8B with 128K context"
+            ),
+            ModelConfig(
+                name="llama3:8b",
+                hf_path="meta-llama/Meta-Llama-3-8B-Instruct",
+                size_gb=16,
+                priority="HIGH",
+                notes="Original Llama 3 8B"
+            ),
+            
+            # Mistral family
+            ModelConfig(
+                name="mistral:7b",
+                hf_path="mistralai/Mistral-7B-Instruct-v0.3",
+                size_gb=14,
+                priority="CRITICAL",
+                notes="Excellent general purpose model"
+            ),
+            
+            # Qwen family - Small
+            ModelConfig(
+                name="qwen2.5:7b",
+                hf_path="Qwen/Qwen2.5-7B-Instruct",
+                size_gb=14,
+                priority="CRITICAL",
+                notes="High-performance Qwen 7B"
+            ),
+            ModelConfig(
+                name="qwen3:8b",
+                hf_path="Qwen/Qwen3-8B-Instruct",
+                size_gb=16,
+                priority="HIGH", 
+                notes="Latest Qwen 3 generation 8B"
+            ),
+            
+            # Gemma family - Small
+            ModelConfig(
+                name="gemma:7b",
+                hf_path="google/gemma-7b-it",
+                size_gb=14,
+                priority="HIGH",
+                notes="Google's instruction-tuned 7B"
+            ),
+            ModelConfig(
+                name="gemma2:9b",
+                hf_path="google/gemma-2-9b-it", 
+                size_gb=18,
+                priority="HIGH",
+                notes="Improved Gemma 2 9B"
+            ),
+            ModelConfig(
+                name="gemma3:4b",
+                hf_path="google/gemma-3-4b-it",
+                size_gb=8,
+                priority="HIGH",
+                notes="Latest Gemma 3 4B"
+            ),
+            
+            # Phi family
+            ModelConfig(
+                name="phi3:3.8b", 
+                hf_path="microsoft/Phi-3-mini-4k-instruct",
+                size_gb=8,
+                priority="HIGH",
+                notes="Microsoft's efficient mini model"
+            ),
+            ModelConfig(
+                name="phi-3.5-mini",
+                hf_path="microsoft/Phi-3.5-mini-instruct",
+                size_gb=8,
+                priority="HIGH",
+                notes="Latest Phi 3.5 mini"
+            ),
+            
+            # DeepSeek family
+            ModelConfig(
+                name="deepseek-r1:8b",
+                hf_path="deepseek-ai/DeepSeek-R1-Distill-Qwen-8B",
+                size_gb=16,
+                priority="HIGH",
+                notes="DeepSeek reasoning distilled model"
+            ),
+            
+            # Vision models
+            ModelConfig(
+                name="llava:7b",
+                hf_path="llava-hf/llava-1.5-7b-hf",
+                size_gb=14,
+                priority="MEDIUM",
+                notes="Vision-language model 7B"
+            ),
                 priority="MEDIUM"
             ),
             ModelConfig(
