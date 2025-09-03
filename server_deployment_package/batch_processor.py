@@ -426,6 +426,99 @@ class BatchProcessor:
             'optimization_enabled': self.optimization_enabled
         }
 
+    def evaluate_model_sequential(self, model_name: str, samples: List[Dict]) -> List[Dict]:
+        """Evaluate model using sequential processing (no per-batch model loading)
+        
+        This is the FIXED version that loads model once and processes all samples,
+        avoiding the VLLM conflicts and memory issues from parallel execution.
+        
+        Args:
+            model_name: Name of model to evaluate
+            samples: List of sample dictionaries
+            
+        Returns:
+            List of evaluation results
+        """
+        logger.info(f"🚀 Starting sequential evaluation of {model_name}")
+        logger.info(f"   📊 Total samples: {len(samples)}")
+        logger.info(f"   🔧 Method: Sequential processing with single model load")
+        
+        start_time = time.time()
+        
+        try:
+            # Start GPU monitoring for this model
+            self.gpu_monitor.start_monitoring()
+            
+            # Use the new evaluate_model_complete method
+            # This loads the model ONCE and processes all samples
+            results = self.runner.evaluate_model_complete(model_name, samples)
+            
+            # Calculate final performance statistics
+            end_time = time.time()
+            total_time = end_time - start_time
+            successful = sum(1 for r in results if r.get('success', False))
+            success_rate = successful / len(results) if results else 0
+            samples_per_second = len(results) / total_time if total_time > 0 else 0
+            
+            # Get final GPU metrics
+            final_gpu_metrics = self.gpu_monitor.get_gpu_metrics()
+            avg_gpu_memory = np.mean([gpu.memory_used_mb for gpu in final_gpu_metrics]) if final_gpu_metrics else 0
+            avg_gpu_util = np.mean([gpu.gpu_utilization for gpu in final_gpu_metrics]) if final_gpu_metrics else 0
+            
+            # Create performance statistics
+            stats = BatchStats(
+                model_name=model_name,
+                batch_size=len(results),  # All samples processed together
+                samples_processed=len(results),
+                processing_time=total_time,
+                samples_per_second=samples_per_second,
+                gpu_memory_used_mb=avg_gpu_memory,
+                gpu_utilization=avg_gpu_util,
+                success_rate=success_rate,
+                timestamp=datetime.now().isoformat()
+            )
+            
+            # Store statistics
+            self.batch_stats[f"{model_name}_sequential"] = stats
+            self.performance_history.append(asdict(stats))
+            
+            logger.info(f"✅ Sequential evaluation complete: {model_name}")
+            logger.info(f"   📊 Total samples: {len(results)}")
+            logger.info(f"   ✅ Successful: {successful} ({success_rate*100:.1f}%)")
+            logger.info(f"   ❌ Failed: {len(results) - successful}")
+            logger.info(f"   ⏱️  Total time: {total_time:.1f}s")
+            logger.info(f"   🚀 Speed: {samples_per_second:.1f} samples/sec")
+            logger.info(f"   💾 GPU Memory: {avg_gpu_memory/1024:.1f}GB")
+            logger.info(f"   ⚡ Performance improvement: No more model loading per batch!")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"❌ Sequential evaluation failed for {model_name}: {e}")
+            
+            # Create error results for all samples
+            error_results = []
+            for i, sample in enumerate(samples):
+                error_result = {
+                    'model': model_name,
+                    'sample_id': sample.get('id', f'sample_{i}'),
+                    'error': str(e),
+                    'success': False,
+                    'response': '',
+                    'inference_time': 0,
+                    'timestamp': datetime.now().isoformat()
+                }
+                error_results.append(error_result)
+            
+            return error_results
+            
+        finally:
+            # Always stop monitoring and cleanup
+            try:
+                self.gpu_monitor.stop_monitoring()
+            except Exception:
+                pass
+
 def main():
     """Test batch processor functionality"""
     # This would be used for testing the batch processor independently

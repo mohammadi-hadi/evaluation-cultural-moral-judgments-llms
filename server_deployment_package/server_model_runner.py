@@ -521,18 +521,52 @@ class ServerModelRunner:
             self.load_model_transformers(model_config)
     
     def unload_model(self):
-        """Unload current model and free memory"""
+        """Unload current model and free memory with comprehensive cleanup"""
         if self.loaded_model is not None:
-            del self.loaded_model
-            self.loaded_model = None
-            self.loaded_model_name = None
+            logger.info(f"🧹 Unloading model: {self.loaded_model_name}")
             
-            # Clear GPU cache
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            gc.collect()
-            
-            logger.info("Model unloaded and memory cleared")
+            try:
+                # Properly delete the model
+                del self.loaded_model
+                self.loaded_model = None
+                self.loaded_model_name = None
+                
+                # Clear any VLLM related process groups
+                try:
+                    import torch.distributed as dist
+                    if dist.is_initialized():
+                        # Note: We don't destroy process groups as they're managed by VLLM
+                        pass
+                except Exception:
+                    pass
+                
+                # Comprehensive GPU memory cleanup
+                if torch.cuda.is_available():
+                    # Clear all CUDA cached memory
+                    torch.cuda.empty_cache()
+                    
+                    # Synchronize all CUDA operations
+                    torch.cuda.synchronize()
+                    
+                    # Additional memory cleanup
+                    for device_id in range(torch.cuda.device_count()):
+                        with torch.cuda.device(device_id):
+                            torch.cuda.empty_cache()
+                
+                # Force garbage collection
+                gc.collect()
+                
+                # Wait a moment for cleanup to complete
+                import time
+                time.sleep(0.5)
+                
+                logger.info("✅ Model unloaded and memory cleared successfully")
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Warning during model cleanup: {e}")
+                # Still mark as unloaded
+                self.loaded_model = None
+                self.loaded_model_name = None
     
     def generate_vllm(self, prompt: str, **kwargs) -> str:
         """Generate text using VLLM"""
@@ -809,6 +843,113 @@ class ServerModelRunner:
             logger.info(f"Results saved to {output_path}")
         
         return results
+
+    def evaluate_model_complete(self, model_name: str, samples: List[Dict]) -> List[Dict]:
+        """Evaluate model on all samples with single model load
+        
+        This method loads the model ONCE and processes all samples in batches,
+        which is much more efficient than loading/unloading for each batch.
+        
+        Args:
+            model_name: Name of model to evaluate
+            samples: List of sample dictionaries with 'id' and 'prompt' keys
+            
+        Returns:
+            List of evaluation results
+        """
+        if model_name not in self.MODEL_CONFIGS:
+            raise ValueError(f"Unknown model: {model_name}")
+        
+        logger.info(f"🚀 Starting complete evaluation of {model_name}")
+        logger.info(f"   📊 Total samples: {len(samples)}")
+        
+        all_results = []
+        
+        try:
+            # Load model once
+            logger.info(f"📥 Loading model: {model_name}")
+            self.load_model(model_name)
+            
+            # Get optimal batch size for this model
+            model_config = self.MODEL_CONFIGS[model_name]
+            if model_config.size_gb > 60:  # Large models
+                batch_size = 16
+            elif model_config.size_gb > 25:  # Medium models
+                batch_size = 32
+            else:  # Small models
+                batch_size = 64
+            
+            logger.info(f"   📦 Using batch size: {batch_size}")
+            
+            # Process all samples in batches
+            total_batches = (len(samples) + batch_size - 1) // batch_size
+            logger.info(f"   🔢 Total batches: {total_batches}")
+            
+            from tqdm import tqdm
+            with tqdm(total=len(samples), desc=f"Processing {model_name}", unit="samples") as pbar:
+                for i in range(0, len(samples), batch_size):
+                    batch_samples = samples[i:i + batch_size]
+                    batch_results = []
+                    
+                    for sample in batch_samples:
+                        try:
+                            # Generate response
+                            result = self.generate(sample['prompt'])
+                            result.update({
+                                'model': model_name,
+                                'sample_id': sample.get('id', f'sample_{i}'),
+                                'success': True,
+                                'timestamp': datetime.now().isoformat()
+                            })
+                            batch_results.append(result)
+                            
+                        except Exception as e:
+                            # Handle individual sample failures
+                            error_result = {
+                                'model': model_name,
+                                'sample_id': sample.get('id', f'sample_{i}'),
+                                'error': str(e),
+                                'success': False,
+                                'response': '',
+                                'inference_time': 0,
+                                'timestamp': datetime.now().isoformat()
+                            }
+                            batch_results.append(error_result)
+                    
+                    all_results.extend(batch_results)
+                    pbar.update(len(batch_samples))
+            
+            # Log completion statistics
+            successful = sum(1 for r in all_results if r.get('success', False))
+            success_rate = successful / len(all_results) if all_results else 0
+            
+            logger.info(f"✅ Model evaluation complete: {model_name}")
+            logger.info(f"   📊 Total samples: {len(all_results)}")
+            logger.info(f"   ✅ Successful: {successful} ({success_rate*100:.1f}%)")
+            logger.info(f"   ❌ Failed: {len(all_results) - successful}")
+            
+        except Exception as e:
+            logger.error(f"❌ Model evaluation failed: {model_name}: {e}")
+            
+            # Create error results for all samples
+            for i, sample in enumerate(samples):
+                error_result = {
+                    'model': model_name,
+                    'sample_id': sample.get('id', f'sample_{i}'),
+                    'error': str(e),
+                    'success': False,
+                    'response': '',
+                    'inference_time': 0,
+                    'timestamp': datetime.now().isoformat()
+                }
+                all_results.append(error_result)
+        
+        finally:
+            # Always unload model and cleanup memory
+            logger.info(f"🧹 Cleaning up model: {model_name}")
+            self.unload_model()
+        
+        return all_results
     
     def get_recommended_models(self, max_gpus: int = 4) -> Dict[str, List[str]]:
         """Get recommended models based on available GPUs
