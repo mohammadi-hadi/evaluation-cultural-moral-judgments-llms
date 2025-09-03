@@ -10,6 +10,7 @@ import json
 import time
 import torch
 import logging
+import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
@@ -35,6 +36,172 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def setup_cuda_environment():
+    """Setup CUDA environment variables for optimal GPU detection"""
+    logger.info("🔧 Setting up CUDA environment...")
+    
+    # Set essential CUDA environment variables
+    cuda_env_vars = {
+        'CUDA_VISIBLE_DEVICES': os.environ.get('CUDA_VISIBLE_DEVICES', '0,1,2,3'),
+        'CUDA_DEVICE_ORDER': 'PCI_BUS_ID',
+        'PYTORCH_CUDA_ALLOC_CONF': 'max_split_size_mb:512',
+        'CUDA_LAUNCH_BLOCKING': '0'  # Enable for debugging if needed
+    }
+    
+    for key, value in cuda_env_vars.items():
+        os.environ[key] = str(value)
+        logger.info(f"   {key} = {value}")
+    
+    # Force PyTorch CUDA initialization
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.init()
+            logger.info(f"✅ PyTorch CUDA initialized successfully")
+        else:
+            logger.warning("⚠️ PyTorch reports CUDA not available")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize PyTorch CUDA: {e}")
+
+def detect_gpus_comprehensive() -> Dict[str, Any]:
+    """Comprehensive GPU detection using multiple methods"""
+    gpu_info = {
+        'count': 0,
+        'total_memory_gb': 0.0,
+        'gpus': [],
+        'detection_method': 'none',
+        'cuda_available': False,
+        'nvidia_smi_available': False
+    }
+    
+    logger.info("🔍 Starting comprehensive GPU detection...")
+    
+    # Method 1: PyTorch CUDA detection
+    try:
+        gpu_info['cuda_available'] = torch.cuda.is_available()
+        if torch.cuda.is_available():
+            gpu_count = torch.cuda.device_count()
+            if gpu_count > 0:
+                gpu_info['count'] = gpu_count
+                gpu_info['detection_method'] = 'pytorch'
+                
+                for i in range(gpu_count):
+                    try:
+                        props = torch.cuda.get_device_properties(i)
+                        memory_gb = props.total_memory / (1024**3)
+                        gpu_info['gpus'].append({
+                            'id': i,
+                            'name': props.name,
+                            'memory_gb': memory_gb
+                        })
+                        gpu_info['total_memory_gb'] += memory_gb
+                        logger.info(f"   GPU {i}: {props.name} - {memory_gb:.1f}GB")
+                    except Exception as e:
+                        logger.warning(f"   ⚠️ Could not get properties for GPU {i}: {e}")
+                        
+                logger.info(f"✅ PyTorch detected {gpu_count} GPUs ({gpu_info['total_memory_gb']:.1f}GB total)")
+                return gpu_info
+        else:
+            logger.warning("⚠️ PyTorch CUDA not available")
+    except Exception as e:
+        logger.warning(f"⚠️ PyTorch GPU detection failed: {e}")
+    
+    # Method 2: nvidia-smi detection
+    try:
+        result = subprocess.run(['nvidia-smi', '--query-gpu=index,name,memory.total', '--format=csv,noheader,nounits'], 
+                              capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            gpu_info['nvidia_smi_available'] = True
+            lines = result.stdout.strip().split('\n')
+            gpu_count = len([line for line in lines if line.strip()])
+            
+            if gpu_count > 0:
+                gpu_info['count'] = gpu_count
+                gpu_info['detection_method'] = 'nvidia-smi'
+                
+                for line in lines:
+                    if line.strip():
+                        parts = [p.strip() for p in line.split(',')]
+                        if len(parts) >= 3:
+                            try:
+                                gpu_id = int(parts[0])
+                                gpu_name = parts[1]
+                                memory_mb = float(parts[2])
+                                memory_gb = memory_mb / 1024
+                                
+                                gpu_info['gpus'].append({
+                                    'id': gpu_id,
+                                    'name': gpu_name,
+                                    'memory_gb': memory_gb
+                                })
+                                gpu_info['total_memory_gb'] += memory_gb
+                                logger.info(f"   GPU {gpu_id}: {gpu_name} - {memory_gb:.1f}GB")
+                            except (ValueError, IndexError) as e:
+                                logger.warning(f"   ⚠️ Could not parse nvidia-smi output: {parts}, error: {e}")
+                
+                logger.info(f"✅ nvidia-smi detected {gpu_count} GPUs ({gpu_info['total_memory_gb']:.1f}GB total)")
+                return gpu_info
+        else:
+            logger.warning(f"⚠️ nvidia-smi failed with return code {result.returncode}")
+            
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning(f"⚠️ nvidia-smi not available: {e}")
+    except Exception as e:
+        logger.warning(f"⚠️ nvidia-smi detection failed: {e}")
+    
+    # Method 3: Environment variable fallback
+    cuda_visible = os.environ.get('CUDA_VISIBLE_DEVICES', '')
+    if cuda_visible and cuda_visible != '-1':
+        try:
+            visible_gpus = [int(x.strip()) for x in cuda_visible.split(',') if x.strip().isdigit()]
+            if visible_gpus:
+                gpu_info['count'] = len(visible_gpus)
+                gpu_info['detection_method'] = 'environment'
+                
+                for i, gpu_id in enumerate(visible_gpus):
+                    gpu_info['gpus'].append({
+                        'id': gpu_id,
+                        'name': f'GPU-{gpu_id}',
+                        'memory_gb': 80.0  # Assume A100 80GB
+                    })
+                    gpu_info['total_memory_gb'] += 80.0
+                
+                logger.info(f"⚠️ Using environment fallback: {gpu_info['count']} GPUs from CUDA_VISIBLE_DEVICES")
+                return gpu_info
+        except Exception as e:
+            logger.warning(f"⚠️ Environment fallback failed: {e}")
+    
+    # No GPUs detected
+    logger.error("❌ No GPUs detected by any method!")
+    logger.info("🔧 Troubleshooting tips:")
+    logger.info("   1. Check: nvidia-smi")
+    logger.info("   2. Check: echo $CUDA_VISIBLE_DEVICES") 
+    logger.info("   3. Check: python -c 'import torch; print(torch.cuda.is_available(), torch.cuda.device_count())'")
+    logger.info("   4. Ensure NVIDIA drivers and CUDA are properly installed")
+    
+    return gpu_info
+
+def install_missing_packages():
+    """Install missing packages needed for optimal GPU monitoring"""
+    logger.info("📦 Checking for required packages...")
+    
+    try:
+        import pynvml
+        logger.info("✅ pynvml is available")
+    except ImportError:
+        logger.info("📦 Installing nvidia-ml-py3 for better GPU monitoring...")
+        try:
+            subprocess.run([sys.executable, '-m', 'pip', 'install', 'nvidia-ml-py3'], 
+                         check=True, capture_output=True)
+            logger.info("✅ nvidia-ml-py3 installed successfully")
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"⚠️ Failed to install nvidia-ml-py3: {e}")
+        except Exception as e:
+            logger.warning(f"⚠️ Unexpected error installing nvidia-ml-py3: {e}")
+
+# Initialize CUDA environment and GPU detection at module level
+setup_cuda_environment()
+install_missing_packages()
 
 def evaluate_single_model_on_gpu(args):
     """Worker function to evaluate a single model on assigned GPU (module-level for pickle)"""
@@ -271,7 +438,7 @@ class ServerModelRunner:
             size_gb=140,
             gpu_memory_gb=160,
             recommended_gpus=2,
-            use_quantization=True,
+            use_quantization=False,  # Disabled - fits in 4×80GB A100 without quantization
             quantization_bits=8,
             priority="CRITICAL",
             notes="Best open 70B"
@@ -292,7 +459,7 @@ class ServerModelRunner:
             size_gb=144,
             gpu_memory_gb=165,
             recommended_gpus=2,
-            use_quantization=True,
+            use_quantization=False,  # Disabled - fits in 4×80GB A100 without quantization
             quantization_bits=8,
             priority="CRITICAL",
             notes="Excellent cross-cultural"
@@ -323,7 +490,7 @@ class ServerModelRunner:
             size_gb=280,
             gpu_memory_gb=320,
             recommended_gpus=4,
-            use_quantization=True,
+            use_quantization=False,  # Disabled - fits exactly in 4×80GB A100 without quantization
             quantization_bits=4,
             priority="MEDIUM",
             notes="Large MoE"
@@ -336,7 +503,7 @@ class ServerModelRunner:
             size_gb=240,
             gpu_memory_gb=280,
             recommended_gpus=4,
-            use_quantization=True,
+            use_quantization=False,  # Disabled - model has native mxfp4, fits in 4×80GB A100
             quantization_bits=4,
             priority="HIGH",
             notes="If/when available"
@@ -374,17 +541,25 @@ class ServerModelRunner:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # Detect GPUs
-        self.n_gpus = torch.cuda.device_count()
-        self.gpu_memory = []
+        # Comprehensive GPU detection
+        gpu_info = detect_gpus_comprehensive()
+        self.n_gpus = gpu_info['count']
+        self.gpu_memory = [gpu['memory_gb'] for gpu in gpu_info['gpus']]
+        self.total_gpu_memory = gpu_info['total_memory_gb']
+        self.gpu_detection_method = gpu_info['detection_method']
+        self.cuda_available = gpu_info['cuda_available']
         
+        # Log GPU information
         if self.n_gpus > 0:
-            for i in range(self.n_gpus):
-                mem = torch.cuda.get_device_properties(i).total_memory / (1024**3)
-                self.gpu_memory.append(mem)
-                logger.info(f"GPU {i}: {mem:.1f}GB")
-        
-        self.total_gpu_memory = sum(self.gpu_memory)
+            logger.info(f"✅ GPU Detection Summary:")
+            logger.info(f"   🔍 Method: {self.gpu_detection_method}")
+            logger.info(f"   📊 Count: {self.n_gpus} GPUs")
+            logger.info(f"   💾 Total Memory: {self.total_gpu_memory:.1f}GB")
+            for i, gpu in enumerate(gpu_info['gpus']):
+                logger.info(f"   GPU {i}: {gpu['name']} - {gpu['memory_gb']:.1f}GB")
+        else:
+            logger.error("❌ No GPUs detected! Server evaluation will not work properly.")
+            logger.info("🔧 Please check CUDA installation and GPU availability.")
         
         # Determine backend
         if use_vllm is not None:
@@ -440,14 +615,14 @@ class ServerModelRunner:
                 "max_num_seqs": 128,
                 "category": "small"
             }
-        elif size_gb <= 80:  # Medium models - use 2 GPU tensor parallelism
+        elif size_gb <= 80:  # Medium models - NOW USE 4 GPUs for maximum speed
             return {
-                "tensor_parallel": 2,
+                "tensor_parallel": 4,  # Changed from 2 to 4 GPUs
                 "can_parallelize": False,
-                "batch_size": 256,  # Higher batch with 2 GPUs
+                "batch_size": 512,  # Maximum batch with 4 GPUs
                 "gpu_memory_util": 0.95,
-                "max_num_seqs": 64,
-                "category": "medium"
+                "max_num_seqs": 32,  # Adjusted for 4 GPU usage
+                "category": "medium-4gpu"  # Updated category name
             }
         else:  # Large models - use all 4 GPUs
             return {
@@ -490,9 +665,16 @@ class ServerModelRunner:
         if gpu_config is None:
             gpu_config = self.get_optimal_gpu_config(model_config.name)
         
-        # VLLM configuration
+        # VLLM configuration - use supported quantization methods
         if model_config.use_quantization:
-            quantization = f"int{model_config.quantization_bits}"
+            # Map quantization bits to VLLM-supported methods
+            if model_config.quantization_bits == 8:
+                quantization = "bitsandbytes"  # Use bitsandbytes for 8-bit
+            elif model_config.quantization_bits == 4:
+                quantization = "awq"  # Use AWQ for 4-bit (more stable than gptq)
+            else:
+                logger.warning(f"Unsupported quantization bits: {model_config.quantization_bits}, disabling quantization")
+                quantization = None
         else:
             quantization = None
         
@@ -520,27 +702,71 @@ class ServerModelRunner:
         if gpu_config["can_parallelize"]:
             logger.info(f"  ⚡ This model can run in parallel with others!")
         
-        self.loaded_model = LLM(
-            model=str(model_path),
-            tensor_parallel_size=optimal_tp_size,
-            dtype="float16",
-            quantization=quantization,
-            trust_remote_code=True,
-            max_model_len=model_config.max_length,
-            gpu_memory_utilization=gpu_memory_util,
-            max_num_seqs=max_num_seqs,
-            max_num_batched_tokens=max_num_batched_tokens,
-            disable_log_stats=True,  # Reduce log noise
-            enforce_eager=True,  # Skip torch.compile for faster loading
-            enable_prefix_caching=True,  # Cache common prefixes
-        )
-        
-        self.loaded_model_name = model_config.name
-        self.current_gpu_config = gpu_config
-        self.current_batch_size = max_num_seqs  # Store for batch processing
-        
-        logger.info(f"✅ Model {model_config.name} loaded successfully with VLLM")
-        logger.info(f"   🎯 Ready for batch processing (up to {max_num_seqs} parallel requests)")
+        # Select appropriate dtype based on quantization method
+        if quantization in ["mxfp4"]:
+            dtype = "bfloat16"  # Required for mxfp4
+        else:
+            dtype = "float16"   # Default for most cases
+
+        try:
+            self.loaded_model = LLM(
+                model=str(model_path),
+                tensor_parallel_size=optimal_tp_size,
+                dtype=dtype,
+                quantization=quantization,
+                trust_remote_code=True,
+                max_model_len=model_config.max_length,
+                gpu_memory_utilization=gpu_memory_util,
+                max_num_seqs=max_num_seqs,
+                max_num_batched_tokens=max_num_batched_tokens,
+                disable_log_stats=True,  # Reduce log noise
+                enforce_eager=True,  # Skip torch.compile for faster loading
+                enable_prefix_caching=True,  # Cache common prefixes
+            )
+            
+            self.loaded_model_name = model_config.name
+            self.current_gpu_config = gpu_config
+            self.current_batch_size = max_num_seqs  # Store for batch processing
+            
+            logger.info(f"✅ Model {model_config.name} loaded successfully with VLLM")
+            logger.info(f"   🎯 Ready for batch processing (up to {max_num_seqs} parallel requests)")
+            
+        except Exception as vllm_error:
+            logger.error(f"❌ VLLM failed to load {model_config.name}: {vllm_error}")
+            logger.info(f"🔄 Falling back to Transformers for {model_config.name}")
+            
+            # Try without quantization first
+            if quantization is not None:
+                logger.info("🔄 Retrying VLLM without quantization...")
+                try:
+                    self.loaded_model = LLM(
+                        model=str(model_path),
+                        tensor_parallel_size=optimal_tp_size,
+                        dtype="float16",  # Use standard float16 without quantization
+                        quantization=None,
+                        trust_remote_code=True,
+                        max_model_len=model_config.max_length,
+                        gpu_memory_utilization=gpu_memory_util,
+                        max_num_seqs=max_num_seqs,
+                        max_num_batched_tokens=max_num_batched_tokens,
+                        disable_log_stats=True,
+                        enforce_eager=True,
+                        enable_prefix_caching=True,
+                    )
+                    
+                    self.loaded_model_name = model_config.name
+                    self.current_gpu_config = gpu_config
+                    self.current_batch_size = max_num_seqs
+                    
+                    logger.info(f"✅ Model {model_config.name} loaded with VLLM (no quantization)")
+                    return
+                    
+                except Exception as retry_error:
+                    logger.error(f"❌ VLLM retry failed: {retry_error}")
+            
+            # Fallback to Transformers
+            logger.info(f"🔄 Using Transformers backend for {model_config.name}")
+            self.load_model_transformers(model_config)
     
     def load_model_transformers(self, model_config: ServerModelConfig):
         """Load model using Transformers"""
@@ -940,6 +1166,7 @@ class ServerModelRunner:
         
         This method loads the model ONCE with optimal GPU configuration and processes 
         all samples in batches optimized for the model size and available hardware.
+        Results are automatically saved with checkpoints for progress tracking.
         
         Args:
             model_name: Name of model to evaluate
@@ -956,6 +1183,22 @@ class ServerModelRunner:
         logger.info(f"   🎯 Method: Single model load with optimized GPU utilization")
         
         all_results = []
+        
+        # Setup result file paths for progress tracking
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        results_dir = self.base_dir / "outputs" / "server_results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Multiple file paths for different monitoring systems
+        result_files = {
+            'main': results_dir / f"{model_name}_results.json",
+            'checkpoint': results_dir / f"{model_name}_checkpoint.json",
+            'integration': results_dir / f"{model_name}_results_server_{timestamp}.json"
+        }
+        
+        logger.info(f"📁 Result files will be saved to:")
+        for name, path in result_files.items():
+            logger.info(f"   {name}: {path}")
         
         try:
             # Get optimal GPU configuration for this model
@@ -975,21 +1218,25 @@ class ServerModelRunner:
             total_batches = (len(samples) + batch_size - 1) // batch_size
             logger.info(f"   🔢 Total batches: {total_batches}")
             
+            # Checkpoint interval (save every 100 samples)
+            checkpoint_interval = 100
+            
             from tqdm import tqdm
             with tqdm(total=len(samples), desc=f"Processing {model_name}", unit="samples") as pbar:
                 for i in range(0, len(samples), batch_size):
                     batch_samples = samples[i:i + batch_size]
                     batch_results = []
                     
-                    for sample in batch_samples:
+                    for j, sample in enumerate(batch_samples):
                         try:
                             # Generate response
                             result = self.generate(sample['prompt'])
                             result.update({
                                 'model': model_name,
-                                'sample_id': sample.get('id', f'sample_{i}'),
+                                'sample_id': sample.get('id', f'sample_{i+j}'),
                                 'success': True,
-                                'timestamp': datetime.now().isoformat()
+                                'timestamp': datetime.now().isoformat(),
+                                'evaluation_type': 'server'
                             })
                             batch_results.append(result)
                             
@@ -997,17 +1244,35 @@ class ServerModelRunner:
                             # Handle individual sample failures
                             error_result = {
                                 'model': model_name,
-                                'sample_id': sample.get('id', f'sample_{i}'),
+                                'sample_id': sample.get('id', f'sample_{i+j}'),
                                 'error': str(e),
                                 'success': False,
                                 'response': '',
                                 'inference_time': 0,
-                                'timestamp': datetime.now().isoformat()
+                                'timestamp': datetime.now().isoformat(),
+                                'evaluation_type': 'server'
                             }
                             batch_results.append(error_result)
                     
                     all_results.extend(batch_results)
                     pbar.update(len(batch_samples))
+                    
+                    # Save checkpoint every checkpoint_interval samples
+                    if len(all_results) % checkpoint_interval == 0 or len(all_results) == len(samples):
+                        try:
+                            # Save checkpoint file
+                            with open(result_files['checkpoint'], 'w') as f:
+                                json.dump(all_results, f, indent=2)
+                            
+                            # Calculate progress statistics
+                            successful = sum(1 for r in all_results if r.get('success', False))
+                            progress = len(all_results) / len(samples) * 100
+                            
+                            logger.info(f"💾 Checkpoint saved: {len(all_results)}/{len(samples)} samples ({progress:.1f}%)")
+                            logger.info(f"   ✅ Success rate: {successful}/{len(all_results)} ({successful/len(all_results)*100:.1f}%)")
+                            
+                        except Exception as save_e:
+                            logger.warning(f"⚠️ Failed to save checkpoint: {save_e}")
             
             # Log completion statistics
             successful = sum(1 for r in all_results if r.get('success', False))
@@ -1017,6 +1282,16 @@ class ServerModelRunner:
             logger.info(f"   📊 Total samples: {len(all_results)}")
             logger.info(f"   ✅ Successful: {successful} ({success_rate*100:.1f}%)")
             logger.info(f"   ❌ Failed: {len(all_results) - successful}")
+            
+            # Save final results to all locations
+            try:
+                for name, path in result_files.items():
+                    with open(path, 'w') as f:
+                        json.dump(all_results, f, indent=2)
+                    logger.info(f"💾 Final results saved: {name} -> {path}")
+                    
+            except Exception as save_e:
+                logger.error(f"❌ Failed to save final results: {save_e}")
             
         except Exception as e:
             logger.error(f"❌ Model evaluation failed: {model_name}: {e}")
@@ -1030,9 +1305,19 @@ class ServerModelRunner:
                     'success': False,
                     'response': '',
                     'inference_time': 0,
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.now().isoformat(),
+                    'evaluation_type': 'server'
                 }
                 all_results.append(error_result)
+            
+            # Save error results
+            try:
+                for name, path in result_files.items():
+                    with open(path, 'w') as f:
+                        json.dump(all_results, f, indent=2)
+                logger.info(f"💾 Error results saved to all locations")
+            except Exception as save_e:
+                logger.error(f"❌ Failed to save error results: {save_e}")
         
         finally:
             # Always unload model and cleanup memory
