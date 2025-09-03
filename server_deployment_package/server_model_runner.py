@@ -394,12 +394,73 @@ class ServerModelRunner:
         
         return available
     
-    def load_model_vllm(self, model_config: ServerModelConfig):
-        """Load model using VLLM with optimized configuration"""
+    def get_optimal_gpu_config(self, model_name: str) -> Dict[str, Any]:
+        """Get optimal GPU configuration for a model to maximize hardware utilization"""
+        model_config = self.MODEL_CONFIGS.get(model_name)
+        if not model_config:
+            return {"tensor_parallel": 1, "can_parallelize": False, "batch_size": 32}
+        
+        # Determine optimal configuration based on model size
+        size_gb = model_config.size_gb
+        
+        if size_gb <= 20:  # Small models - can run multiple in parallel
+            return {
+                "tensor_parallel": 1,
+                "can_parallelize": True,
+                "batch_size": 128,  # Higher batch size for small models
+                "gpu_memory_util": 0.9,
+                "max_num_seqs": 128,
+                "category": "small"
+            }
+        elif size_gb <= 80:  # Medium models - use 2 GPU tensor parallelism
+            return {
+                "tensor_parallel": 2,
+                "can_parallelize": False,
+                "batch_size": 256,  # Higher batch with 2 GPUs
+                "gpu_memory_util": 0.95,
+                "max_num_seqs": 64,
+                "category": "medium"
+            }
+        else:  # Large models - use all 4 GPUs
+            return {
+                "tensor_parallel": 4,
+                "can_parallelize": False,
+                "batch_size": 512,  # Maximum batch with 4 GPUs
+                "gpu_memory_util": 0.95,
+                "max_num_seqs": 32,
+                "category": "large"
+            }
+    
+    def categorize_models_by_gpu_needs(self, model_names: List[str]) -> Dict[str, List[str]]:
+        """Categorize models by their GPU requirements for optimal scheduling"""
+        categories = {
+            "small": [],      # Can run 4 in parallel (1 GPU each)
+            "medium": [],     # Use 2 GPUs each
+            "large": []       # Use all 4 GPUs
+        }
+        
+        for model_name in model_names:
+            gpu_config = self.get_optimal_gpu_config(model_name)
+            category = gpu_config.get("category", "small")
+            categories[category].append(model_name)
+        
+        logger.info(f"📊 Model categorization for 4×A100 optimization:")
+        logger.info(f"   🔹 Small models (1 GPU, parallel): {categories['small']}")
+        logger.info(f"   🔸 Medium models (2 GPUs): {categories['medium']}")
+        logger.info(f"   🔶 Large models (4 GPUs): {categories['large']}")
+        
+        return categories
+    
+    def load_model_vllm(self, model_config: ServerModelConfig, gpu_config: Dict[str, Any] = None):
+        """Load model using VLLM with dynamically optimized configuration"""
         model_path = self.models_dir / model_config.name
         
         if not model_path.exists():
             model_path = model_config.hf_path  # Try HF hub
+        
+        # Get optimal GPU configuration if not provided
+        if gpu_config is None:
+            gpu_config = self.get_optimal_gpu_config(model_config.name)
         
         # VLLM configuration
         if model_config.use_quantization:
@@ -407,28 +468,29 @@ class ServerModelRunner:
         else:
             quantization = None
         
-        # Determine optimal tensor parallel size based on model size
-        optimal_tp_size = min(self.tensor_parallel_size, model_config.recommended_gpus)
+        # Use optimal configuration
+        optimal_tp_size = gpu_config["tensor_parallel"]
+        max_num_seqs = gpu_config["max_num_seqs"]
+        gpu_memory_util = gpu_config["gpu_memory_util"]
         
-        # Optimize batch processing based on model size and available memory
-        if model_config.size_gb > 60:  # Large models (70B+)
-            max_num_seqs = 16
-            max_num_batched_tokens = 16384
-            gpu_memory_util = 0.95
-        elif model_config.size_gb > 25:  # Medium models (32B)
-            max_num_seqs = 32  
+        # Calculate optimal batched tokens based on model size and GPU count
+        if optimal_tp_size == 4:  # Large models with 4 GPUs
+            max_num_batched_tokens = 32768  # Much higher with 4 GPUs
+        elif optimal_tp_size == 2:  # Medium models with 2 GPUs
+            max_num_batched_tokens = 16384  # Higher with 2 GPUs
+        else:  # Small models with 1 GPU
             max_num_batched_tokens = 8192
-            gpu_memory_util = 0.95
-        else:  # Small models (<25GB)
-            max_num_seqs = 64
-            max_num_batched_tokens = 8192
-            gpu_memory_util = 0.95
         
-        logger.info(f"Loading {model_config.name} with VLLM...")
-        logger.info(f"  💾 Size: {model_config.size_gb}GB")
-        logger.info(f"  🔧 Tensor parallel: {optimal_tp_size} GPUs")
-        logger.info(f"  📦 Max batch sequences: {max_num_seqs}")
+        logger.info(f"🚀 Loading {model_config.name} with OPTIMIZED VLLM configuration...")
+        logger.info(f"  💾 Model size: {model_config.size_gb}GB")
+        logger.info(f"  🎯 Category: {gpu_config['category']} model")
+        logger.info(f"  🔧 Tensor parallel: {optimal_tp_size} GPUs ({optimal_tp_size/4*100:.0f}% GPU utilization)")
+        logger.info(f"  📦 Max sequences: {max_num_seqs}")
         logger.info(f"  🚀 Max batched tokens: {max_num_batched_tokens}")
+        logger.info(f"  💰 GPU memory utilization: {gpu_memory_util*100:.0f}%")
+        
+        if gpu_config["can_parallelize"]:
+            logger.info(f"  ⚡ This model can run in parallel with others!")
         
         self.loaded_model = LLM(
             model=str(model_path),
@@ -446,6 +508,7 @@ class ServerModelRunner:
         )
         
         self.loaded_model_name = model_config.name
+        self.current_gpu_config = gpu_config
         self.current_batch_size = max_num_seqs  # Store for batch processing
         
         logger.info(f"✅ Model {model_config.name} loaded successfully with VLLM")
@@ -845,10 +908,10 @@ class ServerModelRunner:
         return results
 
     def evaluate_model_complete(self, model_name: str, samples: List[Dict]) -> List[Dict]:
-        """Evaluate model on all samples with single model load
+        """Evaluate model on all samples with single model load and optimized GPU utilization
         
-        This method loads the model ONCE and processes all samples in batches,
-        which is much more efficient than loading/unloading for each batch.
+        This method loads the model ONCE with optimal GPU configuration and processes 
+        all samples in batches optimized for the model size and available hardware.
         
         Args:
             model_name: Name of model to evaluate
@@ -860,26 +923,25 @@ class ServerModelRunner:
         if model_name not in self.MODEL_CONFIGS:
             raise ValueError(f"Unknown model: {model_name}")
         
-        logger.info(f"🚀 Starting complete evaluation of {model_name}")
+        logger.info(f"🚀 Starting OPTIMIZED evaluation of {model_name}")
         logger.info(f"   📊 Total samples: {len(samples)}")
+        logger.info(f"   🎯 Method: Single model load with optimized GPU utilization")
         
         all_results = []
         
         try:
-            # Load model once
+            # Get optimal GPU configuration for this model
+            gpu_config = self.get_optimal_gpu_config(model_name)
+            
+            # Load model once with optimal configuration
             logger.info(f"📥 Loading model: {model_name}")
             self.load_model(model_name)
             
-            # Get optimal batch size for this model
-            model_config = self.MODEL_CONFIGS[model_name]
-            if model_config.size_gb > 60:  # Large models
-                batch_size = 16
-            elif model_config.size_gb > 25:  # Medium models
-                batch_size = 32
-            else:  # Small models
-                batch_size = 64
+            # Use optimal batch size from GPU configuration
+            batch_size = gpu_config["batch_size"]
             
-            logger.info(f"   📦 Using batch size: {batch_size}")
+            logger.info(f"   📦 Using OPTIMIZED batch size: {batch_size}")
+            logger.info(f"   🔧 GPU configuration: {gpu_config['tensor_parallel']} GPUs, {gpu_config['category']} model")
             
             # Process all samples in batches
             total_batches = (len(samples) + batch_size - 1) // batch_size
@@ -948,6 +1010,116 @@ class ServerModelRunner:
             # Always unload model and cleanup memory
             logger.info(f"🧹 Cleaning up model: {model_name}")
             self.unload_model()
+        
+        return all_results
+    
+    def evaluate_models_parallel(self, model_names: List[str], samples: List[Dict]) -> List[Dict]:
+        """Evaluate multiple small models in parallel on different GPUs
+        
+        This method runs up to 4 small models simultaneously, each on its own GPU,
+        maximizing hardware utilization for models that can_parallelize=True.
+        
+        Args:
+            model_names: List of model names to evaluate in parallel
+            samples: List of sample dictionaries with 'id' and 'prompt' keys
+            
+        Returns:
+            Combined list of evaluation results from all models
+        """
+        import os
+        import multiprocessing as mp
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        
+        logger.info(f"🚀 Starting PARALLEL evaluation of {len(model_names)} models")
+        logger.info(f"   📊 Total samples per model: {len(samples)}")
+        logger.info(f"   ⚡ Method: Parallel execution on separate GPUs")
+        
+        # Verify all models can be parallelized
+        parallel_models = []
+        for model_name in model_names:
+            gpu_config = self.get_optimal_gpu_config(model_name)
+            if gpu_config["can_parallelize"]:
+                parallel_models.append(model_name)
+            else:
+                logger.warning(f"⚠️ {model_name} cannot be parallelized, skipping from parallel batch")
+        
+        if len(parallel_models) > 4:
+            logger.warning(f"⚠️ Too many models for parallel execution ({len(parallel_models)}), using first 4")
+            parallel_models = parallel_models[:4]
+        
+        logger.info(f"   🎯 Parallel models: {parallel_models}")
+        
+        all_results = []
+        
+        def evaluate_single_model_on_gpu(args):
+            """Worker function to evaluate a single model on assigned GPU"""
+            model_name, samples, gpu_id, base_dir = args
+            
+            # Set GPU for this process
+            os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+            
+            # Create a separate model runner for this process
+            from server_model_runner import ServerModelRunner
+            runner = ServerModelRunner(
+                base_dir=base_dir, 
+                use_vllm=True, 
+                tensor_parallel_size=1  # Each model uses 1 GPU
+            )
+            
+            logger.info(f"🔧 Worker GPU {gpu_id}: Starting {model_name}")
+            
+            try:
+                results = runner.evaluate_model_complete(model_name, samples)
+                logger.info(f"✅ Worker GPU {gpu_id}: Completed {model_name} ({len(results)} results)")
+                return results
+            except Exception as e:
+                logger.error(f"❌ Worker GPU {gpu_id}: Failed {model_name} - {e}")
+                return []
+            finally:
+                # Cleanup
+                runner.unload_model()
+        
+        try:
+            # Prepare arguments for parallel execution
+            worker_args = []
+            for i, model_name in enumerate(parallel_models):
+                gpu_id = i  # Assign GPU 0, 1, 2, 3 to models
+                worker_args.append((model_name, samples, gpu_id, str(self.base_dir)))
+            
+            # Execute models in parallel
+            logger.info(f"🚀 Launching {len(worker_args)} parallel workers...")
+            
+            with ProcessPoolExecutor(max_workers=len(worker_args)) as executor:
+                # Submit all jobs
+                future_to_model = {
+                    executor.submit(evaluate_single_model_on_gpu, args): args[0]
+                    for args in worker_args
+                }
+                
+                # Collect results as they complete
+                for future in as_completed(future_to_model):
+                    model_name = future_to_model[future]
+                    try:
+                        results = future.result()
+                        all_results.extend(results)
+                        logger.info(f"✅ Collected results from {model_name}: {len(results)} samples")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to get results from {model_name}: {e}")
+            
+            logger.info(f"🎉 Parallel evaluation complete!")
+            logger.info(f"   📊 Total results: {len(all_results)}")
+            logger.info(f"   ⚡ Performance: {len(parallel_models)} models processed simultaneously")
+            
+        except Exception as e:
+            logger.error(f"❌ Parallel execution failed: {e}")
+            # Fallback to sequential processing
+            logger.info(f"🔄 Falling back to sequential processing...")
+            for model_name in parallel_models:
+                try:
+                    results = self.evaluate_model_complete(model_name, samples)
+                    all_results.extend(results)
+                except Exception as model_e:
+                    logger.error(f"❌ Sequential fallback failed for {model_name}: {model_e}")
         
         return all_results
     

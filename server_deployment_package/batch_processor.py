@@ -518,6 +518,134 @@ class BatchProcessor:
                 self.gpu_monitor.stop_monitoring()
             except Exception:
                 pass
+    
+    def evaluate_models_optimized(self, model_names: List[str], samples: List[Dict]) -> List[Dict]:
+        """Evaluate models with MAXIMUM GPU utilization strategy
+        
+        This method uses the optimal approach for each model category:
+        - Small models: Run 4 in parallel on separate GPUs
+        - Medium models: Run with 2-GPU tensor parallelism
+        - Large models: Run with 4-GPU tensor parallelism
+        
+        Args:
+            model_names: List of model names to evaluate
+            samples: List of sample dictionaries
+            
+        Returns:
+            Combined list of evaluation results from all models
+        """
+        logger.info(f"🚀 Starting OPTIMIZED evaluation with MAXIMUM GPU utilization")
+        logger.info(f"   📊 Models to evaluate: {len(model_names)}")
+        logger.info(f"   📊 Samples per model: {len(samples)}")
+        logger.info(f"   🎯 Strategy: Parallel small models, multi-GPU tensor parallelism for large models")
+        
+        # Categorize models by GPU requirements
+        categories = self.runner.categorize_models_by_gpu_needs(model_names)
+        
+        all_results = []
+        total_start_time = time.time()
+        
+        try:
+            # Phase 1: Small models - Run 4 in parallel
+            small_models = categories["small"]
+            if small_models:
+                logger.info(f"\n🚀 PHASE 1: Small Models - PARALLEL EXECUTION")
+                logger.info(f"   📊 Models: {len(small_models)} ({small_models})")
+                logger.info(f"   ⚡ Strategy: 4 models running simultaneously on separate GPUs")
+                
+                # Process small models in batches of 4
+                for i in range(0, len(small_models), 4):
+                    batch_models = small_models[i:i+4]
+                    logger.info(f"   🔄 Processing parallel batch: {batch_models}")
+                    
+                    batch_results = self.runner.evaluate_models_parallel(batch_models, samples)
+                    all_results.extend(batch_results)
+                    
+                    logger.info(f"   ✅ Completed parallel batch: {len(batch_results)} results")
+            
+            # Phase 2: Medium models - 2 GPU tensor parallelism
+            medium_models = categories["medium"]  
+            if medium_models:
+                logger.info(f"\n🚀 PHASE 2: Medium Models - 2-GPU TENSOR PARALLELISM")
+                logger.info(f"   📊 Models: {len(medium_models)} ({medium_models})")
+                logger.info(f"   ⚡ Strategy: Each model uses 2 GPUs for faster inference")
+                
+                for model_name in medium_models:
+                    logger.info(f"   🔄 Processing medium model: {model_name}")
+                    
+                    # This will use optimal 2-GPU configuration automatically
+                    model_results = self.evaluate_model_sequential(model_name, samples)
+                    all_results.extend(model_results)
+                    
+                    logger.info(f"   ✅ Completed medium model: {len(model_results)} results")
+            
+            # Phase 3: Large models - 4 GPU tensor parallelism
+            large_models = categories["large"]
+            if large_models:
+                logger.info(f"\n🚀 PHASE 3: Large Models - 4-GPU TENSOR PARALLELISM") 
+                logger.info(f"   📊 Models: {len(large_models)} ({large_models})")
+                logger.info(f"   ⚡ Strategy: Each model uses ALL 4 GPUs for maximum speed")
+                
+                for model_name in large_models:
+                    logger.info(f"   🔄 Processing large model: {model_name}")
+                    
+                    # This will use optimal 4-GPU configuration automatically
+                    model_results = self.evaluate_model_sequential(model_name, samples)
+                    all_results.extend(model_results)
+                    
+                    logger.info(f"   ✅ Completed large model: {len(model_results)} results")
+            
+            # Calculate final performance metrics
+            total_time = time.time() - total_start_time
+            successful_results = sum(1 for r in all_results if r.get('success', False))
+            
+            logger.info(f"\n🎉 OPTIMIZED EVALUATION COMPLETE!")
+            logger.info(f"   📊 Total results: {len(all_results):,}")
+            logger.info(f"   ✅ Successful results: {successful_results:,} ({successful_results/len(all_results)*100:.1f}%)")
+            logger.info(f"   ⏱️  Total time: {total_time:.1f}s ({total_time/60:.1f} minutes)")
+            logger.info(f"   🚀 Average speed: {len(all_results)/total_time:.1f} samples/sec")
+            logger.info(f"   ⚡ GPU utilization: MAXIMIZED across all 4 A100 GPUs")
+            
+            performance_improvement = self._estimate_performance_improvement(model_names, total_time)
+            logger.info(f"   📈 Estimated improvement vs single-GPU: {performance_improvement}")
+            
+            return all_results
+            
+        except Exception as e:
+            logger.error(f"❌ Optimized evaluation failed: {e}")
+            logger.info(f"🔄 Falling back to sequential evaluation...")
+            
+            # Fallback to sequential evaluation
+            fallback_results = []
+            for model_name in model_names:
+                try:
+                    results = self.evaluate_model_sequential(model_name, samples)
+                    fallback_results.extend(results)
+                except Exception as model_e:
+                    logger.error(f"❌ Fallback failed for {model_name}: {model_e}")
+            
+            return fallback_results
+    
+    def _estimate_performance_improvement(self, model_names: List[str], actual_time: float) -> str:
+        """Estimate performance improvement compared to single-GPU approach"""
+        # Estimate what single-GPU approach would have taken
+        estimated_single_gpu_time = 0
+        
+        for model_name in model_names:
+            gpu_config = self.runner.get_optimal_gpu_config(model_name)
+            # Rough estimation based on model complexity
+            if gpu_config["category"] == "small":
+                estimated_single_gpu_time += 300  # 5 minutes per small model  
+            elif gpu_config["category"] == "medium":
+                estimated_single_gpu_time += 900  # 15 minutes per medium model
+            else:  # large
+                estimated_single_gpu_time += 1800  # 30 minutes per large model
+        
+        if actual_time > 0:
+            improvement_factor = estimated_single_gpu_time / actual_time
+            return f"{improvement_factor:.1f}x faster"
+        else:
+            return "Unable to calculate"
 
 def main():
     """Test batch processor functionality"""
