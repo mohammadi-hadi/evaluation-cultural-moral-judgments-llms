@@ -36,6 +36,34 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def evaluate_single_model_on_gpu(args):
+    """Worker function to evaluate a single model on assigned GPU (module-level for pickle)"""
+    model_name, samples, gpu_id, base_dir = args
+    
+    # Set GPU for this process
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+    
+    # Create a separate model runner for this process
+    runner = ServerModelRunner(
+        base_dir=base_dir, 
+        use_vllm=True, 
+        tensor_parallel_size=1  # Each model uses 1 GPU
+    )
+    
+    logger.info(f"🔧 Worker GPU {gpu_id}: Starting {model_name}")
+    
+    try:
+        results = runner.evaluate_model_complete(model_name, samples)
+        logger.info(f"✅ Worker GPU {gpu_id}: Completed {model_name} ({len(results)} results)")
+        return results
+    except Exception as e:
+        logger.error(f"❌ Worker GPU {gpu_id}: Failed {model_name} - {e}")
+        return []
+    finally:
+        # Cleanup
+        runner.unload_model()
+
 @dataclass
 class ServerModelConfig:
     """Configuration for server models"""
@@ -1050,34 +1078,6 @@ class ServerModelRunner:
         logger.info(f"   🎯 Parallel models: {parallel_models}")
         
         all_results = []
-        
-        def evaluate_single_model_on_gpu(args):
-            """Worker function to evaluate a single model on assigned GPU"""
-            model_name, samples, gpu_id, base_dir = args
-            
-            # Set GPU for this process
-            os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-            
-            # Create a separate model runner for this process
-            from server_model_runner import ServerModelRunner
-            runner = ServerModelRunner(
-                base_dir=base_dir, 
-                use_vllm=True, 
-                tensor_parallel_size=1  # Each model uses 1 GPU
-            )
-            
-            logger.info(f"🔧 Worker GPU {gpu_id}: Starting {model_name}")
-            
-            try:
-                results = runner.evaluate_model_complete(model_name, samples)
-                logger.info(f"✅ Worker GPU {gpu_id}: Completed {model_name} ({len(results)} results)")
-                return results
-            except Exception as e:
-                logger.error(f"❌ Worker GPU {gpu_id}: Failed {model_name} - {e}")
-                return []
-            finally:
-                # Cleanup
-                runner.unload_model()
         
         try:
             # Prepare arguments for parallel execution
